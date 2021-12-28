@@ -2,7 +2,7 @@
 
 Ping pong ball diffusers on LED strips to form a digital clock/fancy display!
 
-![](bright_clock.png)
+![](doc/bright_clock.png)
 
 I followed the build instructions from here [https://www.instructables.com/Ping-Pong-Ball-LED-Clock/](https://www.instructables.com/Ping-Pong-Ball-LED-Clock/). My own take on building my animations is described in this [**blog post**](https://yiweimao.github.io/blog/ping_pong_led_clock/).
 
@@ -27,7 +27,7 @@ Background Animation Modes:
 - `W`: Thunderstorm
 - `H`: Firepit (works well with single colour time mode set to a light teal)
 
-![](fireworks_screenshot.png)
+![](doc/fireworks_screenshot.png)
 
 Future Improvements:
 - Use a hardware RTC rather than use software
