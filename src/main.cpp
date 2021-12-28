@@ -42,73 +42,24 @@
 #include <Arduino.h>
 #include <FastLED.h>
 #include <RTClib.h>  // Adafruit RTClib
-// Time keeping
-RTC_Millis rtc;
 
 // LEDs
-#define LED_PIN 6
-#define NUM_LEDS 128
+const int LED_PIN = 6;
+const int NUM_LEDS = 128;
+
+// Time keeping
+RTC_Millis rtc;
 
 CRGB leds[NUM_LEDS];
 
 // Settings
-#define REFRESH_RATE_HZ 20
-#define _FRAME_TIME_MS 1000 / REFRESH_RATE_HZ
+const int REFRESH_RATE_HZ = 20;
+const int FRAME_TIME_MS = (1000 / REFRESH_RATE_HZ);
 
 // Global variables
 char mode = 'R';  // 'T' time, 'R' rainbow time, 'N' no op (time doesn't show), 'C' cycle through all digits
-bool is_slant = false;
+
 DateTime now;  // time record
-
-// Background
-char bg_palette = 'B';  // 'R' rainbow, 'B' black, 'T' twinkle, 'F' fireworks, 'W' rain, 'H' firepit
-CHSV bg_colour(64, 255, 190);
-int bg_counter = 0;
-
-// Foreground colour
-CRGB fg_colour = CRGB::White;
-int cycle_counter = 0;  // for displaying all digits quickly 0--9999
-
-CRGB fg_palette(int indx) {
-    if (indx < 0 && indx >= NUM_LEDS)
-        return CRGB::Black;
-    if (mode == 'R' || mode == 'C') {
-        return CHSV((bg_colour.hue + indx) % 256, bg_colour.sat, bg_colour.val);
-    }
-    return fg_colour;
-}
-
-// Look up tables for how to build alphanumeric characters
-
-// referenced from leftmost
-const int digits[10][10] = {
-    {7, 8, 10, 11, 14, 18, 22, 24},         // 0
-    {14, 15, 16, 17, 18},                   // 1
-    {7, 8, 9, 11, 14, 16, 18, 24},          // 2
-    {7, 9, 11, 14, 16, 18, 22, 24},         // 3
-    {9, 10, 11, 16, 18, 22, 24},            // 4
-    {7, 9, 10, 11, 14, 16, 18, 22},         // 5
-    {7, 8, 9, 14, 15, 16, 18, 22},          // 6
-    {7, 11, 14, 16, 17, 24},                // 7
-    {7, 8, 9, 10, 11, 14, 16, 18, 22, 24},  // 8
-    {7, 9, 10, 11, 14, 16, 17, 24},         // 9
-};
-const int digits_len[10] = {8, 5, 8, 8, 7, 8, 8, 6, 10, 8};
-
-// referenced from one place to the right because not all digits will fit at leftmost
-const int slant_digits[10][13] = {
-    {39, 42, 53, 52, 44, 45, 35, 32, 21, 31, 30, 38},      // 0
-    {35, 45, 44, 52, 53},                                  // 1
-    {39, 42, 53, 52, 44, 37, 30, 31, 21, 32, 35},          // 2
-    {39, 42, 53, 52, 44, 37, 30, 45, 35, 32, 21},          // 3
-    {39, 38, 30, 37, 44, 52, 53, 45, 35},                  // 4
-    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21},          // 5
-    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21, 31},      // 6
-    {39, 42, 53, 52, 44, 45, 35, 38},                      // 7
-    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21, 31, 52},  // 8
-    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21, 52},      // 9
-};
-const int slant_digits_len[10] = {12, 5, 11, 11, 9, 11, 12, 8, 13, 12};
 
 const int led_address[7][20] = {
     {999, 999, 999, 12, 13, 26, 27, 40, 41, 54, 55, 68, 69, 82, 83, 96, 97, 110, 111, 124},  // 0th row
@@ -132,7 +83,206 @@ void disp_str(char *str) {
 };
 */
 
-void disp_num(int num, int offset = 0) {
+/** FOREGROUND **/
+
+/** DIGITS **/
+// Look up tables for how to build alphanumeric characters
+// referenced from leftmost
+const int digits[10][10] = {
+    {7, 8, 10, 11, 14, 18, 22, 24},         // 0
+    {14, 15, 16, 17, 18},                   // 1
+    {7, 8, 9, 11, 14, 16, 18, 24},          // 2
+    {7, 9, 11, 14, 16, 18, 22, 24},         // 3
+    {9, 10, 11, 16, 18, 22, 24},            // 4
+    {7, 9, 10, 11, 14, 16, 18, 22},         // 5
+    {7, 8, 9, 14, 15, 16, 18, 22},          // 6
+    {7, 11, 14, 16, 17, 24},                // 7
+    {7, 8, 9, 10, 11, 14, 16, 18, 22, 24},  // 8
+    {7, 9, 10, 11, 14, 16, 17, 24},         // 9
+};
+const int digits_len[10] = {8, 5, 8, 8, 7, 8, 8, 6, 10, 8};
+
+/** SLANTED DIGITS **/
+
+bool is_slant = false;  // Display digits as slanted
+
+// referenced from one place to the right because not all digits will fit at leftmost
+const int slant_digits[10][13] = {
+    {39, 42, 53, 52, 44, 45, 35, 32, 21, 31, 30, 38},      // 0
+    {35, 45, 44, 52, 53},                                  // 1
+    {39, 42, 53, 52, 44, 37, 30, 31, 21, 32, 35},          // 2
+    {39, 42, 53, 52, 44, 37, 30, 45, 35, 32, 21},          // 3
+    {39, 38, 30, 37, 44, 52, 53, 45, 35},                  // 4
+    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21},          // 5
+    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21, 31},      // 6
+    {39, 42, 53, 52, 44, 45, 35, 38},                      // 7
+    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21, 31, 52},  // 8
+    {53, 42, 39, 38, 30, 37, 44, 45, 35, 32, 21, 52},      // 9
+};
+const int slant_digits_len[10] = {12, 5, 11, 11, 9, 11, 12, 8, 13, 12};
+
+CRGB fg_colour = CRGB::White;
+int cycle_counter = 0;  // for displaying all digits quickly 0--9999
+
+/**
+ * @brief
+ * @param int index
+ * @return CRGB
+ **/
+CRGB fg_palette(int indx);
+
+/**
+ * @brief
+ * @param int num
+ * @param int offset
+ **/
+void disp_num(int num, int offset = 0);
+
+/**
+ * @brief
+ * @param int hour
+ * @param int min
+ * @param int sec
+ **/
+void disp_time(int hour, int min, int sec);
+
+/** BACKGROUND **/
+char bg_palette = 'B';  // 'R' rainbow, 'B' black, 'T' twinkle, 'F' fireworks, 'W' rain, 'H' firepit
+CHSV bg_colour(64, 255, 190);
+int bg_counter = 0;
+
+/** RAINBOW **/
+void bg_rainbow();
+
+/** TWINKLE **/
+const int MAX_TWINKLES = 8;
+struct twinkle_t {
+    int pos = -1;   // LED position 0--127
+    int stage = 0;  // record of how bright each twinkle is up to. 0--16
+};
+struct twinkle_t twinkles[MAX_TWINKLES];
+
+/**
+ * @brief
+ **/
+void bg_twinkle();
+
+/** RAIN **/
+const int MAX_RAINDROPS = 16;
+struct rain_t {
+    int pos = -1;  // first row position
+    int stage = 0;
+    int lightning = 0;  // 0 normal rain, 1 is thunder
+    int prev_pos[6];    // holds lightning positions to clear later
+};
+struct rain_t raindrops[MAX_RAINDROPS];
+
+/**
+ * @brief
+ **/
+void bg_rain();
+
+/** FIREWORK **/
+const int MAX_FIREWORKS = 12;
+
+struct firework_t {
+    int pos = -1;           // LED number in last row
+    int direction = 0;      // 0 is left, 1 is right
+    int stage = 0;          // remember where each firework animation is up to
+    char hue = 0;           // colour of each firework
+    int height_offset = 0;  // sometimes lower by one.
+};
+struct firework_t fireworks[MAX_FIREWORKS];
+
+/**
+ * @brief
+ **/
+void bg_firework();
+
+/** Update Functions **/
+/**
+ * @brief
+ **/
+void update_LEDs();
+
+/**
+ * The setup method used by the Arduino.
+ */
+void setup() {
+    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+    // limit my draw to 1A at 5v of power draw
+    FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
+    // FastLED.setBrightness(  BRIGHTNESS );
+    FastLED.clear();
+    FastLED.show();
+
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 5, 2021 at 1:37pm you would call:
+    // rtc.adjust(DateTime(2021, 1, 05, 13, 37, 0));
+    // Note: F() grabs constants from program memory (flash) rather than RAM
+    rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
+}
+
+/**
+ * The main runloop used by the Arduino.
+ */
+void loop() {
+    update_LEDs();
+    FastLED.delay(FRAME_TIME_MS);
+}
+
+// Functions
+
+void update_LEDs() {
+    // update the background
+    if (bg_palette == 'R') {  // rainbow
+        bg_rainbow();
+    } else if (bg_palette == 'B') {  // black
+        FastLED.clear();
+    } else if (bg_palette == 'T') {  // twinkle
+        FastLED.clear();
+        bg_twinkle();
+    } else if (bg_palette == 'F') {  // fireworks
+        FastLED.clear();
+        bg_firework();
+    } else if (bg_palette == 'W') {  // rain
+        FastLED.clear();
+        for (int i = 3; i < 20; i++) {
+            leds[led_address[0][i]] = CRGB::Gray;
+        }
+        for (int i = 2; i < 20; i++) {
+            leds[led_address[1][i]] = CHSV(0, 0, random8(64, 128));
+        }
+        bg_rain();
+    } else if (bg_palette == 'H') {  // firepit
+        FastLED.clear();
+        for (int level = 6; level > 2; level--) {
+            for (int i = 0; i < 17 + (6 - level); i++) {
+                leds[led_address[level][i]] = CHSV(HUE_RED + random8(8), 255, random8(192 - (6 - level) * 64, 255 - (6 - level) * 64));
+            }
+        }
+    }
+
+    // update the foreground
+    if (mode == 'T' || mode == 'R') {  // time
+        now = rtc.now();
+        disp_time(now.hour(), now.minute(), now.second());
+        FastLED.show();
+    } else if (mode == 'N') {  // no operation
+        FastLED.show();
+    } else if (mode == 'C') {  // cycle through all digits
+        disp_time(cycle_counter / 100, cycle_counter % 100, 0);
+        cycle_counter++;
+        if (cycle_counter == 10000)
+            cycle_counter = 0;
+        FastLED.show();
+    } else {
+        FastLED.clear();
+    }
+}
+
+/** FOREGROUND **/
+void disp_num(int num, int offset) {
     if (is_slant) {
         for (int i = 0; i < slant_digits_len[num]; i++) {
             int indx = slant_digits[num][i] + offset - 28;
@@ -170,6 +320,7 @@ void disp_time(int hour, int min, int sec) {
     }
 }
 
+/** BACKGROUND **/
 void bg_rainbow() {
     if (bg_counter < REFRESH_RATE_HZ / 4)
         bg_counter++;
@@ -184,12 +335,6 @@ void bg_rainbow() {
     }
 }
 
-#define MAX_TWINKLES 8
-struct twinkle_t {
-    int pos = -1;   // LED position 0--127
-    int stage = 0;  // record of how bright each twinkle is up to. 0--16
-};
-struct twinkle_t twinkles[MAX_TWINKLES];
 void bg_twinkle() {
     int empty_slot = -1;
     for (int i = 0; i < MAX_TWINKLES; i++) {
@@ -214,14 +359,6 @@ void bg_twinkle() {
     }
 }
 
-#define MAX_RAINDROPS 16
-struct rain_t {
-    int pos = -1;  // first row position
-    int stage = 0;
-    int lightning = 0;  // 0 normal rain, 1 is thunder
-    int prev_pos[6];    // holds lightning positions to clear later
-};
-struct rain_t raindrops[MAX_RAINDROPS];
 void bg_rain() {
     int empty_slot = -1;
     for (int i = 0; i < MAX_RAINDROPS; i++) {
@@ -276,16 +413,6 @@ void bg_rain() {
     }
 }
 
-// This one took me the longest to get working!
-#define MAX_FIREWORKS 12
-struct firework_t {
-    int pos = -1;           // LED number in last row
-    int direction = 0;      // 0 is left, 1 is right
-    int stage = 0;          // remember where each firework animation is up to
-    char hue = 0;           // colour of each firework
-    int height_offset = 0;  // sometimes lower by one.
-};
-struct firework_t fireworks[MAX_FIREWORKS];
 void bg_firework() {
     int empty_slot = -1;
     for (int i = 0; i < MAX_FIREWORKS; i++) {
@@ -358,70 +485,12 @@ void bg_firework() {
     }
 }
 
-void update_LEDs() {
-    // update the background
-    if (bg_palette == 'R') {  // rainbow
-        bg_rainbow();
-    } else if (bg_palette == 'B') {  // black
-        FastLED.clear();
-    } else if (bg_palette == 'T') {  // twinkle
-        FastLED.clear();
-        bg_twinkle();
-    } else if (bg_palette == 'F') {  // fireworks
-        FastLED.clear();
-        bg_firework();
-    } else if (bg_palette == 'W') {  // rain
-        FastLED.clear();
-        for (int i = 3; i < 20; i++) {
-            leds[led_address[0][i]] = CRGB::Gray;
-        }
-        for (int i = 2; i < 20; i++) {
-            leds[led_address[1][i]] = CHSV(0, 0, random8(64, 128));
-        }
-        bg_rain();
-    } else if (bg_palette == 'H') {  // firepit
-        FastLED.clear();
-        for (int level = 6; level > 2; level--) {
-            for (int i = 0; i < 17 + (6 - level); i++) {
-                leds[led_address[level][i]] = CHSV(HUE_RED + random8(8), 255, random8(192 - (6 - level) * 64, 255 - (6 - level) * 64));
-            }
-        }
+/** LowLevel LED Stuff**/
+CRGB fg_palette(int indx) {
+    if (indx < 0 && indx >= NUM_LEDS)
+        return CRGB::Black;
+    if (mode == 'R' || mode == 'C') {
+        return CHSV((bg_colour.hue + indx) % 256, bg_colour.sat, bg_colour.val);
     }
-
-    // update the foreground
-    if (mode == 'T' || mode == 'R') {  // time
-        now = rtc.now();
-        disp_time(now.hour(), now.minute(), now.second());
-        FastLED.show();
-    } else if (mode == 'N') {  // no operation
-        FastLED.show();
-    } else if (mode == 'C') {  // cycle through all digits
-        disp_time(cycle_counter / 100, cycle_counter % 100, 0);
-        cycle_counter++;
-        if (cycle_counter == 10000)
-            cycle_counter = 0;
-        FastLED.show();
-    } else {
-        FastLED.clear();
-    }
-}
-
-void setup() {
-    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-    // limit my draw to 1A at 5v of power draw
-    FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
-    // FastLED.setBrightness(  BRIGHTNESS );
-    FastLED.clear();
-    FastLED.show();
-
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 5, 2021 at 1:37pm you would call:
-    // rtc.adjust(DateTime(2021, 1, 05, 13, 37, 0));
-    // Note: F() grabs constants from program memory (flash) rather than RAM
-    rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
-}
-
-void loop() {
-    update_LEDs();
-    FastLED.delay(_FRAME_TIME_MS);
+    return fg_colour;
 }
