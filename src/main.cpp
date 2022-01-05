@@ -15,14 +15,14 @@
     Build instructions from https://www.instructables.com/Ping-Pong-Ball-LED-Clock/
     The following foreground and background modes can be mixed and matched!
 
-    Foreground Modes:
+    Foreground Modes: mode_fg
     - 'T': Single colour time mode
     - 'R': Scrolling rainbow time mode
     - 'N': No time
     - 'C': Cycle through all digits 0--9999 quickly
     - is_slanted: Option to use slanted digits or original digits (from https://www.instructables.com/Ping-Pong-Ball-LED-Clock/)
 
-    Background Animation Modes:
+    Background Animation Modes: mode_bg
     - 'R': Scrolling rainbow background
     - 'B': No background
     - 'T': Twinkle
@@ -43,24 +43,68 @@
 #include <FastLED.h>
 #include <RTClib.h>  // Adafruit RTClib
 
-// LEDs
+// IO-MAPPING
+#ifdef BUILD_FOR_NANO
 const int LED_PIN = 6;
-const int NUM_LEDS = 128;
+#elif BUILD_FOR_ESP32
+const int LED_PIN = 23;
+#endif
 
-// Time keeping
-RTC_Millis rtc;
-
-CRGB leds[NUM_LEDS];
-
-// Settings
+/** CONFIGURATION **/
+const int NUM_LEDS = 128;  // Nbr of LEDS's
 const int REFRESH_RATE_HZ = 20;
 const int FRAME_TIME_MS = (1000 / REFRESH_RATE_HZ);
 
-// Global variables
-char mode = 'R';  // 'T' time, 'R' rainbow time, 'N' no op (time doesn't show), 'C' cycle through all digits
+// Settings
+// char mode_fg = 'R';  // 'T' time, 'R' rainbow time, 'N' no op (time doesn't show), 'C' cycle through all digits
 
-DateTime now;  // time record
+enum class ModeFG { None,         // 'N' no op (time doesn't show)
+                    Time,         // 'T' time
+                    TimeRainbow,  // 'R' rainbow time,
+                    Cycle         // 'C' cycle through all digits
+};
 
+enum class ModeBG { None,              // 'B': No background
+                    SolidColor,        // 'S': One color
+                    ScrollingRainbow,  // 'R': Scrolling rainbow background
+                    Twinkle,           // 'T': Twinkle
+                    Fireworks,         // 'F': Fireworks
+                    Thunderstorm,      // 'W': Thunderstorm
+                    Firepit            // 'H': Firepit (works well with single colour time mode set to a light teal)
+};
+
+struct Foreground {
+    ModeFG Mode = ModeFG::Time;
+    CRGB DefaultColour = CRGB::Snow;
+    bool is_slant = false;  // Display digits as slanted
+};
+
+struct Background {
+    ModeBG Mode = ModeBG::SolidColor;
+    CRGB DefaultColour = CRGB::DarkBlue;
+};
+
+struct Led {
+    Foreground Fg;
+    Background Bg;
+} LedDisplay;
+
+// LEDs
+
+/**
+ * Imagining the display as a parallelogram slanted to the left,
+ * I turned Figure 9 into a two dimensional array (look up table) with values corresponding to the strip index.
+ * For the positions that don't exist, I put values of 999.
+ *
+ *        / 012 013 ...
+ *      / 001 011   ...
+ *    / 002 010 015 ...
+ *  < 000 003 009   ...
+ *    \ 004 008 017 ...
+ *      \ 005 007   ...
+ *        \ 006 019 ...
+ *
+ * */
 const int led_address[7][20] = {
     {999, 999, 999, 12, 13, 26, 27, 40, 41, 54, 55, 68, 69, 82, 83, 96, 97, 110, 111, 124},  // 0th row
     {999, 999, 1, 11, 14, 25, 28, 39, 42, 53, 56, 67, 70, 81, 84, 95, 98, 109, 112, 123},    // 1st row
@@ -71,17 +115,9 @@ const int led_address[7][20] = {
     {6, 19, 20, 33, 34, 47, 48, 61, 62, 75, 76, 89, 90, 103, 104, 117, 118, 999, 999, 999},  // 6th row
 };
 
-/*
-// TEXT
-// A--Z ! . : ^
-const int slant_chars[30][13] = {
-  {7},
-};
-const int slant_chars_len[30] = {1};
-
-void disp_str(char *str) {
-};
-*/
+RTC_Millis rtc;  // Time keeping
+CRGB leds[NUM_LEDS];
+DateTime now;  // time record
 
 /** FOREGROUND **/
 
@@ -104,8 +140,6 @@ const int digits_len[10] = {8, 5, 8, 8, 7, 8, 8, 6, 10, 8};
 
 /** SLANTED DIGITS **/
 
-bool is_slant = false;  // Display digits as slanted
-
 // referenced from one place to the right because not all digits will fit at leftmost
 const int slant_digits[10][13] = {
     {39, 42, 53, 52, 44, 45, 35, 32, 21, 31, 30, 38},      // 0
@@ -121,37 +155,60 @@ const int slant_digits[10][13] = {
 };
 const int slant_digits_len[10] = {12, 5, 11, 11, 9, 11, 12, 8, 13, 12};
 
-CRGB fg_colour = CRGB::White;
 int cycle_counter = 0;  // for displaying all digits quickly 0--9999
-
-/**
- * @brief
- * @param int index
- * @return CRGB
- **/
-CRGB fg_palette(int indx);
-
-/**
- * @brief
- * @param int num
- * @param int offset
- **/
-void disp_num(int num, int offset = 0);
 
 /**
  * @brief
  * @param int hour
  * @param int min
  * @param int sec
+ * @param char Foreground Modes
+ * @param bool Slanted Digits
  **/
-void disp_time(int hour, int min, int sec);
+void disp_time(int hour, int min, int sec, Foreground &fg);
+
+/**
+ * @brief
+ * @param int num
+ * @param int offset
+ * @param bool Slanted Digits
+ **/
+void disp_num(int num, int offset, Foreground &fg);
+
+/**
+ * @brief Set color for foreground
+ * @param int index
+ * @param Foreground Struct containging foreground settings
+ * @return CRGB
+ **/
+CRGB fg_palette(int indx, Foreground &fg);
+
+/*
+// TEXT
+// A--Z ! . : ^
+const int slant_chars[30][13] = {
+  {7},
+};
+const int slant_chars_len[30] = {1};
+
+void disp_str(char *str) {
+};
+*/
 
 /** BACKGROUND **/
-char bg_palette = 'B';  // 'R' rainbow, 'B' black, 'T' twinkle, 'F' fireworks, 'W' rain, 'H' firepit
+// char bg_palette = 'B';  // 'R' rainbow, 'B' black, 'T' twinkle, 'F' fireworks, 'W' rain, 'H' firepit
 CHSV bg_colour(64, 255, 190);
 int bg_counter = 0;
 
+/**
+ * @brief Display background in one solid color
+ **/
+void bg_solidColor(Background &bg);
+
 /** RAINBOW **/
+/**
+ * @brief
+ **/
 void bg_rainbow();
 
 /** TWINKLE **/
@@ -172,8 +229,8 @@ const int MAX_RAINDROPS = 16;
 struct rain_t {
     int pos = -1;  // first row position
     int stage = 0;
-    int lightning = 0;  // 0 normal rain, 1 is thunder
-    int prev_pos[6];    // holds lightning positions to clear later
+    bool lightning = false;  // 0 normal rain, 1 is ligtning
+    int prev_pos[6];         // holds lightning positions to clear later
 };
 struct rain_t raindrops[MAX_RAINDROPS];
 
@@ -199,11 +256,16 @@ struct firework_t fireworks[MAX_FIREWORKS];
  **/
 void bg_firework();
 
+/**
+ * @brief
+ **/
+void bg_firepit();
+
 /** Update Functions **/
 /**
  * @brief
  **/
-void update_LEDs();
+void update_LEDs(Led &LedDisplay);
 
 /**
  * The setup method used by the Arduino.
@@ -227,79 +289,72 @@ void setup() {
  * The main runloop used by the Arduino.
  */
 void loop() {
-    update_LEDs();
+    update_LEDs(LedDisplay);
     FastLED.delay(FRAME_TIME_MS);
 }
 
 // Functions
 
-void update_LEDs() {
+void update_LEDs(Led &LedDisplay) {
     // update the background
-    if (bg_palette == 'R') {  // rainbow
-        bg_rainbow();
-    } else if (bg_palette == 'B') {  // black
-        FastLED.clear();
-    } else if (bg_palette == 'T') {  // twinkle
-        FastLED.clear();
-        bg_twinkle();
-    } else if (bg_palette == 'F') {  // fireworks
-        FastLED.clear();
-        bg_firework();
-    } else if (bg_palette == 'W') {  // rain
-        FastLED.clear();
-        for (int i = 3; i < 20; i++) {
-            leds[led_address[0][i]] = CRGB::Gray;
-        }
-        for (int i = 2; i < 20; i++) {
-            leds[led_address[1][i]] = CHSV(0, 0, random8(64, 128));
-        }
-        bg_rain();
-    } else if (bg_palette == 'H') {  // firepit
-        FastLED.clear();
-        for (int level = 6; level > 2; level--) {
-            for (int i = 0; i < 17 + (6 - level); i++) {
-                leds[led_address[level][i]] = CHSV(HUE_RED + random8(8), 255, random8(192 - (6 - level) * 64, 255 - (6 - level) * 64));
-            }
-        }
+    switch (LedDisplay.Bg.Mode) {
+        case ModeBG::None:
+            FastLED.clear();
+            break;
+        case ModeBG::SolidColor:
+            bg_solidColor(LedDisplay.Bg);
+            break;
+        case ModeBG::ScrollingRainbow:
+            bg_rainbow();
+            break;
+        case ModeBG::Twinkle:
+            FastLED.clear();
+            bg_twinkle();
+            break;
+        case ModeBG::Fireworks:
+            FastLED.clear();
+            bg_firework();
+            break;
+        case ModeBG::Thunderstorm:
+            FastLED.clear();
+            bg_rain();
+            break;
+        case ModeBG::Firepit:
+            FastLED.clear();
+            bg_firepit();
+            break;
+        default:
+            break;
     }
 
     // update the foreground
-    if (mode == 'T' || mode == 'R') {  // time
-        now = rtc.now();
-        disp_time(now.hour(), now.minute(), now.second());
-        FastLED.show();
-    } else if (mode == 'N') {  // no operation
-        FastLED.show();
-    } else if (mode == 'C') {  // cycle through all digits
-        disp_time(cycle_counter / 100, cycle_counter % 100, 0);
-        cycle_counter++;
-        if (cycle_counter == 10000)
-            cycle_counter = 0;
-        FastLED.show();
-    } else {
-        FastLED.clear();
+    switch (LedDisplay.Fg.Mode) {
+        case ModeFG::Time:
+        case ModeFG::TimeRainbow:
+            now = rtc.now();
+            disp_time(now.hour(), now.minute(), now.second(), LedDisplay.Fg);
+            FastLED.show();
+            break;
+        case ModeFG::None:  // No operation
+            FastLED.show();
+            break;
+        case ModeFG::Cycle:
+            disp_time(cycle_counter / 100, cycle_counter % 100, 0, LedDisplay.Fg);
+            cycle_counter++;
+            if (cycle_counter == 10000)
+                cycle_counter = 0;
+            FastLED.show();
+            break;
+        default:
+            FastLED.clear();
+            break;
     }
 }
 
-/** FOREGROUND **/
-void disp_num(int num, int offset) {
-    if (is_slant) {
-        for (int i = 0; i < slant_digits_len[num]; i++) {
-            int indx = slant_digits[num][i] + offset - 28;
-            if (indx < 7)
-                indx++;  // adjust when LEDS really close to the start of the strip
-            if (indx >= 0 && indx < 128)
-                leds[indx] = fg_palette(indx);
-        }
-    } else {
-        for (int i = 0; i < digits_len[num]; i++) {
-            leds[digits[num][i] + offset] = fg_palette(digits[num][i] + offset);
-        }
-    }
-}
+/** ================ FOREGROUND ================ **/
 
-void disp_time(int hour, int min, int sec) {
-    if (mode == 'R' || mode == 'C') {  // rainbow text
+void disp_time(int hour, int min, int sec, Foreground &fg) {
+    if ((fg.Mode == ModeFG::TimeRainbow) || (fg.Mode == ModeFG::Cycle)) {
         if (bg_counter < REFRESH_RATE_HZ / 4)
             bg_counter++;
         else {
@@ -308,19 +363,61 @@ void disp_time(int hour, int min, int sec) {
         }
     }
 
-    disp_num(hour / 10);
-    disp_num(hour % 10, 28);
-    disp_num(min / 10, 70);
-    disp_num(min % 10, 70 + 28);
+    // Write Digits
+    disp_num(hour / 10, 0, fg);       // 1. Digit 10Hours
+    disp_num(hour % 10, 28, fg);      // 2. Digit 1Hour
+    disp_num(min / 10, 70, fg);       // 3. Digit 10 Min
+    disp_num(min % 10, 70 + 28, fg);  // 4. Digit 1Min
 
-    // seconds tick
+    // seconds tick between Digti 2 and 3 refreshed all 2 seconds
     if (sec % 2 == 0) {
-        leds[(is_slant) ? 59 : 64] = fg_palette((is_slant) ? 59 : 64);
-        leds[66] = fg_palette(66);
+        // Upper dot
+        leds[66] = fg_palette(66, fg);
+
+        // Lower dot
+        if (fg.is_slant) {
+            leds[59] = fg_palette(59, fg);
+        } else {
+            leds[64] = fg_palette(64, fg);
+        }
     }
 }
 
-/** BACKGROUND **/
+void disp_num(int num, int offset, Foreground &fg) {
+    if (fg.is_slant) {
+        for (int i = 0; i < slant_digits_len[num]; i++) {
+            int indx = slant_digits[num][i] + offset - 28;
+            if (indx < 7)
+                indx++;  // adjust when LEDS really close to the start of the strip
+            if (indx >= 0 && indx < 128)
+                leds[indx] = fg_palette(indx, fg);
+        }
+    } else {
+        for (int i = 0; i < digits_len[num]; i++) {
+            leds[digits[num][i] + offset] = fg_palette(digits[num][i] + offset, fg);
+        }
+    }
+}
+
+CRGB fg_palette(int indx, Foreground &fg) {
+    // Check if index is valid
+    if (indx < 0 && indx >= NUM_LEDS) {
+        return CRGB::Black;
+    }
+    // Mode Scrolling Rainbow Time or Cyclic
+    if ((fg.Mode == ModeFG::TimeRainbow) || (fg.Mode == ModeFG::Cycle)) {
+        return CHSV((bg_colour.hue + indx) % 256, bg_colour.sat, bg_colour.val);
+    }
+
+    return fg.DefaultColour;
+}
+
+/** ================ BACKGROUND ================ **/
+void bg_solidColor(Background &bg) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = bg.DefaultColour;
+    }
+}
 void bg_rainbow() {
     if (bg_counter < REFRESH_RATE_HZ / 4)
         bg_counter++;
@@ -361,6 +458,14 @@ void bg_twinkle() {
 
 void bg_rain() {
     int empty_slot = -1;
+    // Set background
+    for (int i = 3; i < 20; i++) {
+        leds[led_address[0][i]] = CRGB::Gray;
+    }
+    for (int i = 2; i < 20; i++) {
+        leds[led_address[1][i]] = CHSV(0, 0, random8(64, 128));
+    }
+
     for (int i = 0; i < MAX_RAINDROPS; i++) {
         if (raindrops[i].pos == -1) {
             empty_slot = i;
@@ -414,6 +519,7 @@ void bg_rain() {
 }
 
 void bg_firework() {
+    const int START_STAGE = 24;  //    Starting stage
     int empty_slot = -1;
     for (int i = 0; i < MAX_FIREWORKS; i++) {
         if (fireworks[i].pos == -1) {
@@ -424,7 +530,7 @@ void bg_firework() {
 
     if (random8() < 24 && empty_slot != -1) {
         fireworks[empty_slot].pos = random8(3, 14);  // 3--13
-        fireworks[empty_slot].stage = 24;
+        fireworks[empty_slot].stage = START_STAGE;
         fireworks[empty_slot].direction = random8(0, 2);      // 0--1
         fireworks[empty_slot].hue = random8();                // 0--255
         fireworks[empty_slot].height_offset = random8(0, 2);  // 0--1
@@ -436,9 +542,10 @@ void bg_firework() {
             int y = 2 + fireworks[i].height_offset;
             int x = fireworks[i].pos + 4 * fireworks[i].direction;
 
-            if (fireworks[i].stage == 24)
+            if (fireworks[i].stage == START_STAGE)
+                // Set startpoint to white
                 leds[led_address[6][fireworks[i].pos]] = CRGB::White;
-            else if (fireworks[i].stage >= 20 + fireworks[i].height_offset) {
+            else if (fireworks[i].stage >= (20 + fireworks[i].height_offset)) {
                 int level = 6 - (24 - fireworks[i].stage);
                 leds[led_address[level][fireworks[i].pos + (6 - level) * fireworks[i].direction]] = CRGB::White;
                 leds[led_address[level + 1][fireworks[i].pos + (6 - level + 1) * fireworks[i].direction]] = CRGB::Black;
@@ -485,12 +592,10 @@ void bg_firework() {
     }
 }
 
-/** LowLevel LED Stuff**/
-CRGB fg_palette(int indx) {
-    if (indx < 0 && indx >= NUM_LEDS)
-        return CRGB::Black;
-    if (mode == 'R' || mode == 'C') {
-        return CHSV((bg_colour.hue + indx) % 256, bg_colour.sat, bg_colour.val);
+void bg_firepit() {
+    for (int level = 6; level > 2; level--) {
+        for (int i = 0; i < 17 + (6 - level); i++) {
+            leds[led_address[level][i]] = CHSV(HUE_RED + random8(8), 255, random8(192 - (6 - level) * 64, 255 - (6 - level) * 64));
+        }
     }
-    return fg_colour;
 }
