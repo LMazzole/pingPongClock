@@ -240,7 +240,7 @@ struct rain_t raindrops[MAX_RAINDROPS];
 void bg_rain();
 
 /** FIREWORK **/
-const int MAX_FIREWORKS = 12;
+const int MAX_FIREWORKS = 5;
 
 struct firework_t {
     int pos = -1;           // LED number in last row
@@ -549,7 +549,7 @@ void bg_firework() {
                 int level = 6 - (24 - fireworks[i].stage);
                 leds[led_address[level][fireworks[i].pos + (6 - level) * fireworks[i].direction]] = CRGB::White;
                 leds[led_address[level + 1][fireworks[i].pos + (6 - level + 1) * fireworks[i].direction]] = CRGB::Black;
-            } else if (fireworks[i].stage == 18 && fireworks[i].stage == 17) {
+            } else if ((fireworks[i].stage == 18) || (fireworks[i].stage == 17)) {
                 // explode in 6 directions from (x,y)
                 leds[led_address[y][x]] = CRGB::Black;
                 leds[led_address[y - 1][x + 1]] = CHSV(fireworks[i].hue, 255, 255);
