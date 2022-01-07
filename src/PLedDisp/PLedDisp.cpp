@@ -16,17 +16,12 @@
 PLedDisp::PLedDisp() {
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
     // limit my draw to 8A at 5v of power draw
-    FastLED.setMaxPowerInVoltsAndMilliamps(5, 8000);
+    FastLED.setMaxPowerInVoltsAndMilliamps(5, 2000);
     // FastLED.setBrightness(  BRIGHTNESS );
     FastLED.clear();
     FastLED.show();
     FastLED.setMaxRefreshRate(REFRESH_RATE_HZ);
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 5, 2021 at 1:37pm you would call:
-    // rtc.adjust(DateTime(2021, 1, 05, 13, 37, 0));
-    // Note: F() grabs constants from program memory (flash) rather than RAM
-    rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
-
+    FastLED.setBrightness(100);
     CHSV bg_colour(64, 255, 190);
 }
 
@@ -34,26 +29,32 @@ PLedDisp::~PLedDisp() {
 }
 
 void PLedDisp::setBackgroundMode(ModeBG mode) {
-    LedDisplay.Bg.Mode = mode;
+    this->Bg.Mode = mode;
 }
 void PLedDisp::setBackgroundColor(CRGB color) {
-    LedDisplay.Bg.Color = color;
+    this->Bg.Color = color;
 }
 
 void PLedDisp::setFrameMode(ModeFR mode) {
-    LedDisplay.Fr.Mode = mode;
+    this->Fr.Mode = mode;
 }
 
 void PLedDisp::setFrameColor(CRGB color) {
-    LedDisplay.Fr.Color = color;
+    this->Fr.Color = color;
 }
 
 void PLedDisp::setForegroundMode(ModeFG mode, bool TextSlanted) {
-    LedDisplay.Fg.is_slant = TextSlanted;
-    LedDisplay.Fg.Mode = mode;
+    this->Fg.is_slant = TextSlanted;
+    this->Fg.Mode = mode;
 }
 void PLedDisp::setForegroundColor(CRGB color) {
-    LedDisplay.Fg.Color = color;
+    this->Fg.Color = color;
+}
+
+void PLedDisp::setWarning(uint indicator, bool statusOk, uint Level) {
+    if (indicator < sizeof(ErrorIndicator) / sizeof(ErrorIndicator[0])) {
+        ErrorIndicator[indicator] = ((statusOk == false) * Level);
+    }
 }
 
 void PLedDisp::update_LEDs() {
@@ -65,12 +66,12 @@ void PLedDisp::update_LEDs() {
     }
 
     // update the background
-    switch (LedDisplay.Bg.Mode) {
+    switch (Bg.Mode) {
         case ModeBG::None:
             FastLED.clear();
             break;
         case ModeBG::SolidColor:
-            bg_solidColor(LedDisplay.Bg);
+            bg_solidColor(Bg);
             break;
         case ModeBG::ScrollingRainbow:
             bg_rainbow();
@@ -96,31 +97,31 @@ void PLedDisp::update_LEDs() {
     }
 
     // update the frame
-    switch (LedDisplay.Fr.Mode) {
+    switch (Fr.Mode) {
         case ModeFR::None:
             break;
         case ModeFR::Time:
-            now = rtc.now();
-            fr_time(now, LedDisplay.Fr);
+            now = RTC_TIME.now();
+            fr_time(now, Fr);
             break;
         case ModeFR::SolidColor:
-            fr_solidColor(LedDisplay.Fr);
+            fr_solidColor(Fr);
         default:
             break;
     }
 
     // update the foreground
-    switch (LedDisplay.Fg.Mode) {
+    switch (Fg.Mode) {
         case ModeFG::Time:
         case ModeFG::TimeRainbow:
-            now = rtc.now();
-            disp_time(now, LedDisplay.Fg);
+            now = RTC_TIME.now();
+            disp_time(now, Fg);
 
             break;
         case ModeFG::None:  // No operation
             break;
         case ModeFG::Cycle:
-            disp_number((cycle_counter / 1000) % 10, (cycle_counter / 100) % 10, (cycle_counter / 10) % 10, cycle_counter % 10, LedDisplay.Fg);
+            disp_number((cycle_counter / 1000) % 10, (cycle_counter / 100) % 10, (cycle_counter / 10) % 10, cycle_counter % 10, Fg);
             cycle_counter++;
             if (cycle_counter >= 10000)
                 cycle_counter = 0;
@@ -129,6 +130,17 @@ void PLedDisp::update_LEDs() {
             break;
     }
 
+    // Display warnings/Errors
+    for (int i = 0; i < (sizeof(ErrorIndicator) / sizeof(ErrorIndicator[0])); i++) {
+        switch (ErrorIndicator[i]) {
+            case 1:  // warning
+                leds[ErrorIndicatorAdr[i]] = CRGB::DarkOrange;
+                break;
+            case 2:  // error
+                leds[ErrorIndicatorAdr[i]] = CRGB::Red;
+                break;
+        }
+    }
     FastLED.show();
 }
 

@@ -40,14 +40,36 @@
     - Connect to Wifi (e.g. using an ESP32)
 */
 #include <Arduino.h>
+#include <NTPClient.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
 #include "PLedDisp/PLedDisp.h"
+#include "WlanConfiguration.h"
 
-PLedDisp *pleddisp;  ///< Instance
-char mode_fg;        //
-char mode_fr;        //
-char mode_bg;        //
+RTC_Millis RTC_TIME;  // Global Time keeping
+
+// Replace with your network credentials
+const char* ssid = DEFAULT_WIFI_SSID;            // "SSID"
+const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
+const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
+
+// Define NTP Client to get time
+WiFiUDP ntpUDP;
+
+// Set offset time in seconds to adjust for your timezone, for example:
+// GMT +1 = 3600
+// GMT +8 = 28800
+// GMT -1 = -3600
+// GMT 0 = 0
+int ntpTimeOffset = 3600;               // Seconds
+int ntpUpdateInterval = 5 * 60 * 1000;  // ms
+NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
+
+PLedDisp* pleddisp;  ///< Instance
+
 uint smaStep = 0;
+
 /**
  * The setup method used by the Arduino.
  */
@@ -56,6 +78,16 @@ void setup() {
     while (!Serial) {
         // wait for serial port to connect. Needed for native USB port only
     }
+    WiFi.begin(ssid, password);
+
+    // while (WiFi.status() != WL_CONNECTED) {
+    //     // wait for wlan to connect
+    //     delay(500);
+    //     Serial.print(".");
+    // }
+
+    timeClient.begin();
+    RTC_TIME.begin(DateTime(F(__DATE__), F(__TIME__)));
     pleddisp = new PLedDisp();
 }
 
@@ -63,10 +95,15 @@ void setup() {
  * The main runloop used by the Arduino.
  */
 void loop() {
+    bool StatusNtpOk;
+    bool StatusWlanOk;
+    char mode_fg;  //
+    char mode_fr;  //
+    char mode_bg;  //
     switch (smaStep) {
         case 0:
             // Idle
-            smaStep = 10;
+            smaStep = 0;
             break;
         case 10:
             Serial.println("Set Foreground Mode:");
@@ -233,5 +270,14 @@ void loop() {
             break;
     }
 
+    StatusNtpOk = timeClient.update();
+    StatusWlanOk = (WiFi.status() == WL_CONNECTED);
+    if (StatusNtpOk) {
+        RTC_TIME.adjust(DateTime(timeClient.getEpochTime()));
+    }
+    pleddisp->setWarning(0, StatusWlanOk, 2);
+    pleddisp->setWarning(1, StatusNtpOk);
+    pleddisp->setWarning(2, true, 2);
+    pleddisp->setWarning(3, true);
     pleddisp->update_LEDs();
 }
