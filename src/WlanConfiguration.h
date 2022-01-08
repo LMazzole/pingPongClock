@@ -11,11 +11,9 @@
  *
  */
 
-#ifndef WLANCONFIGURATION_H
-#define WLANCONFIGURATION_H
+#pragma once
 
 //=============WLAN CONNECTION==================================
 #define DEFAULT_WIFI_SSID "SSIDName"      ///< SSID to connect to
 #define DEFAULT_WIFI_PASSWORD "Password"  ///< Password to corresponding SSID
 
-#endif

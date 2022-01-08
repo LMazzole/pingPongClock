@@ -44,15 +44,23 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
+#include "LogConfiguration.h"
 #include "PLedDisp/PLedDisp.h"
 #include "WlanConfiguration.h"
 
-RTC_Millis RTC_TIME;  // Global Time keeping
+// Global Time keeping
+RTC_Millis RTC_TIME;
+DateTime TIME_NOW;
 
 // Replace with your network credentials
 const char* ssid = DEFAULT_WIFI_SSID;            // "SSID"
 const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
 const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
+
+// Time constants for easyier calculation
+const uint TIME_SECONDSINMINUTE = 60;
+const uint TIME_SECONDSINHOUR = 60 * TIME_SECONDSINMINUTE;
+const uint TIME_SECONDSINDAY = 24 * TIME_SECONDSINHOUR;
 
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
@@ -62,13 +70,51 @@ WiFiUDP ntpUDP;
 // GMT +8 = 28800
 // GMT -1 = -3600
 // GMT 0 = 0
-int ntpTimeOffset = 3600;               // Seconds
-int ntpUpdateInterval = 5 * 60 * 1000;  // ms
+const int ntpTimeOffset = +1 * TIME_SECONDSINHOUR;  // [sec] GMT +1
+const int ntpUpdateInterval = 5 * 60 * 1000;        // [ms] 5min
 NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
 
 PLedDisp* pleddisp;  ///< Instance
 
-uint smaStep = 0;
+struct StateMachine {
+    bool doInitAction = true;
+    uint actualState = 0;
+    uint oldState = 99;
+};
+
+// Statemachine to set behavior via serial
+StateMachine SmaSerial;
+enum class StateSerial { Idle,
+                         SetBackground,
+                         SetForeground,
+                         SetFrame,
+                         Update };
+void UpdateSerialSma();
+char mode_fg = 'n';  // Mode Foreground
+char mode_fr = 'n';  // Mode Frame
+char mode_bg = 'n';  // Mode Background
+
+// Statemachine to control behavior via time
+StateMachine SmaTime;
+enum class StateTime { Idle,
+                       Morning,
+                       Day,
+                       Evening,
+                       Night };
+void UpdateTimeSma();
+
+uint NbrRepeatTrainAnimation = 0;
+
+/**
+ * @brief Display a frame in 4 steps/different color as indicator for a timer.
+ * Needs to be called every second.
+ *
+ * @param timeSecondsPassedInDay - Time now in seconds since 00:00 of this day
+ * @param timeSecondsNextAlarm - Time when the timer ends in seconds since 00:00 of this day
+ * @return true - Timer finished
+ * @return false - Timer still running
+ */
+bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsNextAlarm);
 
 /**
  * The setup method used by the Arduino.
@@ -78,6 +124,8 @@ void setup() {
     while (!Serial) {
         // wait for serial port to connect. Needed for native USB port only
     }
+    DBPrintln("==Start Setup==");
+
     WiFi.begin(ssid, password);
 
     // while (WiFi.status() != WL_CONNECTED) {
@@ -97,62 +145,78 @@ void setup() {
 void loop() {
     bool StatusNtpOk;
     bool StatusWlanOk;
-    char mode_fg;  //
-    char mode_fr;  //
-    char mode_bg;  //
-    switch (smaStep) {
-        case 0:
-            // Idle
-            smaStep = 0;
+
+    UpdateSerialSma();
+
+    StatusNtpOk = timeClient.update();
+    StatusWlanOk = (WiFi.status() == WL_CONNECTED);
+    if (StatusNtpOk) {
+        RTC_TIME.adjust(DateTime(timeClient.getEpochTime()));
+    }
+
+    UpdateTimeSma();
+
+    pleddisp->setWarning(0, StatusWlanOk, 2);
+    pleddisp->setWarning(1, StatusNtpOk);
+    pleddisp->setWarning(2, true, 2);
+    pleddisp->setWarning(3, true);
+    pleddisp->update_LEDs();
+}
+
+void UpdateSerialSma() {
+    switch (SmaSerial.actualState) {
+        SmaSerial.doInitAction = (SmaSerial.oldState != SmaSerial.actualState);
+        SmaSerial.actualState = SmaSerial.oldState;
+        case uint(StateSerial::Idle):
+            if (SmaSerial.doInitAction) {
+            }
             break;
-        case 10:
-            Serial.println("Set Foreground Mode:");
-            Serial.println("'N' no op (time doesn't show)");
-            Serial.println("'T' time");
-            Serial.println("'R' rainbow time");
-            Serial.println("'C' cycle through all digits");
-            smaStep = 11;
-            break;
-        case 11:
+        case uint(StateSerial::SetForeground):
+            if (SmaSerial.doInitAction) {
+                Serial.println("Set Foreground Mode:");
+                Serial.println("'N' no op (time doesn't show)");
+                Serial.println("'T' time");
+                Serial.println("'R' rainbow time");
+                Serial.println("'C' cycle through all digits");
+            }
+
             mode_fg = Serial.read();
             if (((mode_fg == 'N') or (mode_fg == 'n')) or
                 ((mode_fg == 'T') or (mode_fg == 't')) or
                 ((mode_fg == 'R') or (mode_fg == 'r')) or
                 ((mode_fg == 'C') or (mode_fg == 'c'))) {
                 Serial.println(mode_fg);
-                smaStep = 20;
+                SmaSerial.actualState = uint(StateSerial::SetFrame);
             }
             break;
-        case 20:
-            Serial.println("Set Frame Mode");
-            Serial.println("'N' No background");
-            Serial.println("'S' One color");
-            Serial.println("'T' time");
-            smaStep = 21;
-            break;
-        case 21:
+        case uint(StateSerial::SetFrame):
+            if (SmaSerial.doInitAction) {
+                Serial.println("Set Frame Mode");
+                Serial.println("'N' No background");
+                Serial.println("'S' One color");
+                Serial.println("'T' time");
+            }
+
             mode_fr = Serial.read();
             if (((mode_fr == 'N') or (mode_fr == 'n')) or
                 ((mode_fr == 'T') or (mode_fr == 't')) or
                 ((mode_fr == 'S') or (mode_fr == 's'))) {
                 Serial.println(mode_fr);
-                smaStep = 30;
+                SmaSerial.actualState = uint(StateSerial::SetBackground);
             }
             break;
-        case 30:
-            Serial.println("Set Background Mode");
-            Serial.println("'N' No background");
-            Serial.println("'S' One color");
-            Serial.println("'R' Scrolling rainbow background");
-            Serial.println("'W' Twinkle");
-            Serial.println("'F' Fireworks");
-            Serial.println("'T' Thunderstorm");
-            Serial.println("'P' Firepit");
-            smaStep = 31;
-            break;
-        case 31:
-            // while (Serial.available() == 0) {
-            // };
+        case uint(StateSerial::SetBackground):
+            if (SmaSerial.doInitAction) {
+                Serial.println("Set Background Mode");
+                Serial.println("'N' No background");
+                Serial.println("'S' One color");
+                Serial.println("'R' Scrolling rainbow background");
+                Serial.println("'W' Twinkle");
+                Serial.println("'F' Fireworks");
+                Serial.println("'T' Thunderstorm");
+                Serial.println("'P' Firepit");
+            }
+
             mode_bg = Serial.read();
             if (((mode_bg == 'N') or (mode_bg == 'n')) or
                 ((mode_bg == 'S') or (mode_bg == 's')) or
@@ -162,11 +226,11 @@ void loop() {
                 ((mode_bg == 'T') or (mode_bg == 't')) or
                 ((mode_bg == 'P') or (mode_bg == 'p'))) {
                 Serial.println(mode_bg);
-                smaStep = 110;
+                SmaSerial.actualState = uint(StateSerial::Update);
             }
             break;
 
-        case 110:
+        case uint(StateSerial::Update):
             switch (mode_fg) {
                 case 'N':
                 case 'n':
@@ -193,10 +257,7 @@ void loop() {
                     Serial.println("FG: DEFAULT");
                     break;
             }
-            smaStep = 120;
-            break;
 
-        case 120:
             switch (mode_fr) {
                 case 'N':
                 case 'n':
@@ -218,10 +279,7 @@ void loop() {
                     Serial.println("FR: DEFAULT");
                     break;
             }
-            smaStep = 130;
-            break;
 
-        case 130:
             switch (mode_bg) {
                 case 'N':
                 case 'n':
@@ -263,21 +321,154 @@ void loop() {
                     Serial.println("BG: DEFAULT");
                     break;
             }
-            smaStep = 0;
+            SmaSerial.actualState = uint(StateSerial::Idle);
             Serial.println("----------------------------------");
             break;
         default:
             break;
     }
+}
 
-    StatusNtpOk = timeClient.update();
-    StatusWlanOk = (WiFi.status() == WL_CONNECTED);
-    if (StatusNtpOk) {
-        RTC_TIME.adjust(DateTime(timeClient.getEpochTime()));
+void UpdateTimeSma() {
+    TIME_NOW = RTC_TIME.now();
+    uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_SECONDSINDAY;
+    bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
+    const uint timeStartRoutineNight = 1 * TIME_SECONDSINMINUTE;                                       //[sec] 0:01
+    const uint timeStartRoutineMorning = 6.5 * TIME_SECONDSINHOUR;                                     //[sec] 6:30
+    const uint timeStartRoutineMorningFirstTrain = 7 * TIME_SECONDSINHOUR + 1 * TIME_SECONDSINMINUTE;  //[sec] 7:01
+    const uint timeStartRoutineDay = 8.5 * TIME_SECONDSINHOUR;                                         //[sec] 8:30
+    const uint timeStartRoutineEvening = 17.50 * TIME_SECONDSINHOUR;                                   //[sec] 17:30
+    const uint brightnessDay = 80;
+    const uint brightnessNight = 5;
+
+    SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
+    SmaTime.oldState = SmaTime.actualState;
+    if (SmaTime.doInitAction) {
+        DBPrintln(SmaTime.actualState);
+        DBPrintln(timeSecondsPassedInDay);
+        DBPrintln(timeSecondsPassedInDay / 60.0 / 60);
     }
-    pleddisp->setWarning(0, StatusWlanOk, 2);
-    pleddisp->setWarning(1, StatusNtpOk);
-    pleddisp->setWarning(2, true, 2);
-    pleddisp->setWarning(3, true);
-    pleddisp->update_LEDs();
+    switch (SmaTime.actualState) {
+        case uint(StateTime::Idle):
+            if (SmaTime.doInitAction) {
+                DBPrintln("StateTime::Idle");
+                // Set defaults
+                pleddisp->setForegroundColor(CRGB::Peru);
+                pleddisp->setBrightness(brightnessDay);
+            }
+
+            if ((timeSecondsPassedInDay >= timeStartRoutineNight) and (timeSecondsPassedInDay < timeStartRoutineMorning)) {
+                SmaTime.actualState = uint(StateTime::Night);
+                break;
+            }
+            if ((timeSecondsPassedInDay >= timeStartRoutineMorning) and (timeSecondsPassedInDay < timeStartRoutineDay)) {
+                SmaTime.actualState = uint(StateTime::Morning);
+                break;
+            }
+            if ((timeSecondsPassedInDay >= timeStartRoutineDay) and (timeSecondsPassedInDay < timeStartRoutineEvening)) {
+                SmaTime.actualState = uint(StateTime::Day);
+                break;
+            }
+            if (timeSecondsPassedInDay >= timeStartRoutineEvening) {
+                SmaTime.actualState = uint(StateTime::Evening);
+                break;
+            }
+
+            break;
+        case uint(StateTime::Morning):
+            if (SmaTime.doInitAction) {
+                DBPrintln("StateTime::Morning");
+                pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+                pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                pleddisp->setBrightness(brightnessDay);
+
+                NbrRepeatTrainAnimation = 0;
+            }
+
+            if (NbrRepeatTrainAnimation < 4) {
+                bool AnimationFinished = SetTimerAnimation(timeSecondsPassedInDay,
+                                                           timeStartRoutineMorningFirstTrain + (NbrRepeatTrainAnimation * 15 * TIME_SECONDSINMINUTE));
+                if (AnimationFinished) {
+                    NbrRepeatTrainAnimation++;
+                    DBPrint("NbrRepeatTrainAnimation: ");
+                    DBPrintln(NbrRepeatTrainAnimation);
+                }
+            }
+            if (timeSecondsPassedInDay >= timeStartRoutineDay) {
+                SmaTime.actualState = uint(StateTime::Day);
+                break;
+            }
+            break;
+        case uint(StateTime::Day):
+            if (SmaTime.doInitAction) {
+                DBPrintln("StateTime::Day");
+                pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+                pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+                if (DayIsWeekend) {
+                    pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                } else {
+                    pleddisp->setForegroundMode(PLedDisp::ModeFG::None);
+                }
+                pleddisp->setBrightness(brightnessDay);
+            }
+
+            if (timeSecondsPassedInDay >= timeStartRoutineEvening) {
+                SmaTime.actualState = uint(StateTime::Evening);
+                break;
+            }
+            break;
+        case uint(StateTime::Evening):
+            if (SmaTime.doInitAction) {
+                DBPrintln("StateTime::Evening");
+            }
+
+            if ((timeSecondsPassedInDay >= timeStartRoutineNight) && (timeSecondsPassedInDay < timeStartRoutineMorning)) {
+                SmaTime.actualState = uint(StateTime::Night);
+                break;
+            }
+            break;
+        case uint(StateTime::Night):
+            if (SmaTime.doInitAction) {
+                DBPrintln("StateTime::Night");
+                // Turn off
+                pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+                pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                pleddisp->setBrightness(brightnessNight);
+            }
+
+            if (timeSecondsPassedInDay == timeStartRoutineMorning) {
+                SmaTime.actualState = uint(StateTime::Morning);
+                break;
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsNextAlarm) {
+    const uint timeLeftInfo = 6 * TIME_SECONDSINMINUTE;     // 6 minutes left - Info
+    const uint timeLeftWarning = 4 * TIME_SECONDSINMINUTE;  // 4 minutes left - Warning
+    const uint timeLeftRunning = 3 * TIME_SECONDSINMINUTE;  // 3 minutes left - RUN!
+    const uint timeLeftStop = 2 * TIME_SECONDSINMINUTE;     // 2 minutes left - Too late
+
+    int timeLeft = timeSecondsNextAlarm - timeSecondsPassedInDay;
+
+    if (timeLeft < timeLeftStop) {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+    } else if (timeLeft < timeLeftRunning) {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
+        pleddisp->setFrameColor(CRGB::Red);
+    } else if (timeLeft < timeLeftWarning) {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
+        pleddisp->setFrameColor(CRGB::DarkOrange);
+    } else if (timeLeft < timeLeftInfo) {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
+        pleddisp->setFrameColor(CRGB::LightBlue);
+    }
+
+    return (timeLeft == 0);
 }

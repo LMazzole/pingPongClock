@@ -21,7 +21,7 @@ PLedDisp::PLedDisp() {
     FastLED.clear();
     FastLED.show();
     FastLED.setMaxRefreshRate(REFRESH_RATE_HZ);
-    FastLED.setBrightness(100);
+    FastLED.setBrightness(80);
     CHSV bg_colour(64, 255, 190);
 }
 
@@ -101,8 +101,7 @@ void PLedDisp::update_LEDs() {
         case ModeFR::None:
             break;
         case ModeFR::Time:
-            now = RTC_TIME.now();
-            fr_time(now, Fr);
+            fr_time(TIME_NOW, Fr);
             break;
         case ModeFR::SolidColor:
             fr_solidColor(Fr);
@@ -114,8 +113,7 @@ void PLedDisp::update_LEDs() {
     switch (Fg.Mode) {
         case ModeFG::Time:
         case ModeFG::TimeRainbow:
-            now = RTC_TIME.now();
-            disp_time(now, Fg);
+            disp_time(TIME_NOW, Fg);
 
             break;
         case ModeFG::None:  // No operation

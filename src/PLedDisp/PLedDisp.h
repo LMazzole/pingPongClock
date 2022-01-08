@@ -4,8 +4,7 @@
  *
  */
 
-#ifndef PLEDDISP_H__
-#define PLEDDISP_H__
+#pragma once
 
 #include <FastLED.h>
 #include <RTClib.h>  // Adafruit RTClib
@@ -22,6 +21,7 @@ const int MAX_TWINKLES = 8;
 const int MAX_RAINDROPS = 16;
 const int MAX_FIREWORKS = 5;
 extern RTC_Millis RTC_TIME;
+extern DateTime TIME_NOW;
 
 class PLedDisp {
     //=====PUBLIC====================================================================================
@@ -132,7 +132,7 @@ class PLedDisp {
    private:
     struct Foreground {
         ModeFG Mode = ModeFG::Time;
-        CRGB Color = CRGB::DarkGrey;
+        CRGB Color = CRGB::Peru;
         bool is_slant = true;  // Display digits as slanted
     } Fg;
     struct Background {
@@ -334,5 +334,3 @@ class PLedDisp {
      **/
     void bg_firepit();
 };
-
-#endif
