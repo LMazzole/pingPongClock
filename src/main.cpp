@@ -58,9 +58,9 @@ const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
 const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
 
 // Time constants for easyier calculation
-const uint TIME_SECONDSINMINUTE = 60;
-const uint TIME_SECONDSINHOUR = 60 * TIME_SECONDSINMINUTE;
-const uint TIME_SECONDSINDAY = 24 * TIME_SECONDSINHOUR;
+const uint TIME_MINUTEINSECONDS = 60;
+const uint TIME_HOURINSECONDS = 60 * TIME_MINUTEINSECONDS;
+const uint TIME_DAYINSECONDS = 24 * TIME_HOURINSECONDS;
 
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
@@ -70,7 +70,7 @@ WiFiUDP ntpUDP;
 // GMT +8 = 28800
 // GMT -1 = -3600
 // GMT 0 = 0
-const int ntpTimeOffset = +1 * TIME_SECONDSINHOUR;  // [sec] GMT +1
+const int ntpTimeOffset = +1 * TIME_HOURINSECONDS;  // [sec] GMT +1
 const int ntpUpdateInterval = 5 * 60 * 1000;        // [ms] 5min
 NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
 
@@ -104,18 +104,23 @@ enum class StateTime { Idle,
 void UpdateTimeSma();
 
 uint NbrRepeatTrainAnimation = 0;
-
 /**
  * @brief Display a frame in 4 steps/different color as indicator for a timer.
  * Needs to be called every second.
  *
  * @param timeSecondsPassedInDay - Time now in seconds since 00:00 of this day
- * @param timeSecondsNextAlarm - Time when the timer ends in seconds since 00:00 of this day
+ * @param timeSecondsTimerEnds - Time when the timer ends in seconds since 00:00 of this day
  * @return true - Timer finished
  * @return false - Timer still running
  */
 bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsNextAlarm);
 
+enum class Recycling { None,
+                       Paper,
+                       Cardboard,
+                       Metal
+};
+enum Recycling CheckDateForRecycling();
 /**
  * The setup method used by the Arduino.
  */
@@ -128,11 +133,12 @@ void setup() {
 
     WiFi.begin(ssid, password);
 
-    // while (WiFi.status() != WL_CONNECTED) {
-    //     // wait for wlan to connect
-    //     delay(500);
-    //     Serial.print(".");
-    // }
+    while (WiFi.status() != WL_CONNECTED) {
+        // wait for wlan to connect
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println(" WLAN connected.");
 
     timeClient.begin();
     RTC_TIME.begin(DateTime(F(__DATE__), F(__TIME__)));
@@ -146,7 +152,7 @@ void loop() {
     bool StatusNtpOk;
     bool StatusWlanOk;
 
-    UpdateSerialSma();
+    // UpdateSerialSma();
 
     StatusNtpOk = timeClient.update();
     StatusWlanOk = (WiFi.status() == WL_CONNECTED);
@@ -331,15 +337,16 @@ void UpdateSerialSma() {
 
 void UpdateTimeSma() {
     TIME_NOW = RTC_TIME.now();
-    uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_SECONDSINDAY;
+    uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_DAYINSECONDS;
     bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
-    const uint timeStartRoutineNight = 1 * TIME_SECONDSINMINUTE;                                       //[sec] 0:01
-    const uint timeStartRoutineMorning = 6.5 * TIME_SECONDSINHOUR;                                     //[sec] 6:30
-    const uint timeStartRoutineMorningFirstTrain = 7 * TIME_SECONDSINHOUR + 1 * TIME_SECONDSINMINUTE;  //[sec] 7:01
-    const uint timeStartRoutineDay = 8.5 * TIME_SECONDSINHOUR;                                         //[sec] 8:30
-    const uint timeStartRoutineEvening = 17.50 * TIME_SECONDSINHOUR;                                   //[sec] 17:30
-    const uint brightnessDay = 80;
-    const uint brightnessNight = 5;
+
+    const uint timeStartRoutineNight = 1 * TIME_MINUTEINSECONDS;                                       //[sec] 0:01
+    const uint timeStartRoutineMorning = 6.5 * TIME_HOURINSECONDS;                                     //[sec] 6:30
+    const uint timeStartRoutineMorningFirstTrain = 7 * TIME_HOURINSECONDS + 1 * TIME_MINUTEINSECONDS;  //[sec] 7:01
+    const uint timeStartRoutineDay = 8.5 * TIME_HOURINSECONDS;                                         //[sec] 8:30
+    const uint timeStartRoutineEvening = 17.50 * TIME_HOURINSECONDS;                                   //[sec] 17:30
+    const uint brightnessHigh = 70;
+    const uint brightnessLow = 2;
 
     SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
     SmaTime.oldState = SmaTime.actualState;
@@ -354,7 +361,7 @@ void UpdateTimeSma() {
                 DBPrintln("StateTime::Idle");
                 // Set defaults
                 pleddisp->setForegroundColor(CRGB::Peru);
-                pleddisp->setBrightness(brightnessDay);
+                pleddisp->setBrightness(brightnessHigh);
             }
 
             if ((timeSecondsPassedInDay >= timeStartRoutineNight) and (timeSecondsPassedInDay < timeStartRoutineMorning)) {
@@ -378,17 +385,19 @@ void UpdateTimeSma() {
         case uint(StateTime::Morning):
             if (SmaTime.doInitAction) {
                 DBPrintln("StateTime::Morning");
+                NbrRepeatTrainAnimation = 0;
+
                 pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
                 pleddisp->setFrameMode(PLedDisp::ModeFR::None);
                 pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
-                pleddisp->setBrightness(brightnessDay);
-
-                NbrRepeatTrainAnimation = 0;
             }
+            pleddisp->setBrightness(brightnessHigh);
 
             if (NbrRepeatTrainAnimation < 4) {
-                bool AnimationFinished = SetTimerAnimation(timeSecondsPassedInDay,
-                                                           timeStartRoutineMorningFirstTrain + (NbrRepeatTrainAnimation * 15 * TIME_SECONDSINMINUTE));
+                uint timeAlarmForNextTrain = timeStartRoutineMorningFirstTrain;                  // DayTime s when next train leaves
+                timeAlarmForNextTrain += (NbrRepeatTrainAnimation * 15 * TIME_MINUTEINSECONDS);  // Train leaves every 15 Minutes
+                timeAlarmForNextTrain -= (3 * TIME_MINUTEINSECONDS);                             // Alarmtime 3Minute before train leaves
+                bool AnimationFinished = SetTimerAnimation(timeSecondsPassedInDay, timeAlarmForNextTrain);
                 if (AnimationFinished) {
                     NbrRepeatTrainAnimation++;
                     DBPrint("NbrRepeatTrainAnimation: ");
@@ -403,15 +412,16 @@ void UpdateTimeSma() {
         case uint(StateTime::Day):
             if (SmaTime.doInitAction) {
                 DBPrintln("StateTime::Day");
+
                 pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
                 pleddisp->setFrameMode(PLedDisp::ModeFR::None);
                 if (DayIsWeekend) {
                     pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
                 } else {
-                    pleddisp->setForegroundMode(PLedDisp::ModeFG::None);
+                    pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
                 }
-                pleddisp->setBrightness(brightnessDay);
             }
+            pleddisp->setBrightness(brightnessHigh);
 
             if (timeSecondsPassedInDay >= timeStartRoutineEvening) {
                 SmaTime.actualState = uint(StateTime::Evening);
@@ -421,7 +431,26 @@ void UpdateTimeSma() {
         case uint(StateTime::Evening):
             if (SmaTime.doInitAction) {
                 DBPrintln("StateTime::Evening");
+
+                // Check for ToDoTasks for the next day
+                switch (CheckDateForRecycling()) {
+                    case Recycling::Cardboard:
+                        pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
+                        pleddisp->setFrameColor(CRGB::SandyBrown);
+                        break;
+                    case Recycling::Paper:
+                        pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
+                        pleddisp->setFrameColor(CRGB::WhiteSmoke);
+                        break;
+                    case Recycling::Metal:
+                        pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
+                        pleddisp->setFrameColor(CRGB::MediumBlue);
+                        break;
+                    default:
+                        break;
+                };
             }
+            pleddisp->setBrightness(brightnessHigh);
 
             if ((timeSecondsPassedInDay >= timeStartRoutineNight) && (timeSecondsPassedInDay < timeStartRoutineMorning)) {
                 SmaTime.actualState = uint(StateTime::Night);
@@ -434,9 +463,9 @@ void UpdateTimeSma() {
                 // Turn off
                 pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
                 pleddisp->setFrameMode(PLedDisp::ModeFR::None);
-                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
-                pleddisp->setBrightness(brightnessNight);
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::None, true);
             }
+            pleddisp->setBrightness(brightnessLow);
 
             if (timeSecondsPassedInDay == timeStartRoutineMorning) {
                 SmaTime.actualState = uint(StateTime::Morning);
@@ -447,28 +476,69 @@ void UpdateTimeSma() {
         default:
             break;
     }
+
 }
 
-bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsNextAlarm) {
-    const uint timeLeftInfo = 6 * TIME_SECONDSINMINUTE;     // 6 minutes left - Info
-    const uint timeLeftWarning = 4 * TIME_SECONDSINMINUTE;  // 4 minutes left - Warning
-    const uint timeLeftRunning = 3 * TIME_SECONDSINMINUTE;  // 3 minutes left - RUN!
-    const uint timeLeftStop = 2 * TIME_SECONDSINMINUTE;     // 2 minutes left - Too late
+bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsTimerEnds) {
+    const uint timeLeftIndicator1 = 6 * TIME_MINUTEINSECONDS;  // Info
+    const uint timeLeftIndicator2 = 3 * TIME_MINUTEINSECONDS;  // Warning
+    const uint timeLeftIndicator3 = 1 * TIME_MINUTEINSECONDS;  // Last Indicator
 
-    int timeLeft = timeSecondsNextAlarm - timeSecondsPassedInDay;
-
-    if (timeLeft < timeLeftStop) {
+    if (timeSecondsTimerEnds < timeSecondsPassedInDay) {
+        // Timer endet
         pleddisp->setFrameMode(PLedDisp::ModeFR::None);
-    } else if (timeLeft < timeLeftRunning) {
+        return true;
+    }
+
+    int timeLeft = timeSecondsTimerEnds - timeSecondsPassedInDay;
+
+    if (timeLeft < timeLeftIndicator3) {
         pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
         pleddisp->setFrameColor(CRGB::Red);
-    } else if (timeLeft < timeLeftWarning) {
+    } else if (timeLeft < timeLeftIndicator2) {
         pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
         pleddisp->setFrameColor(CRGB::DarkOrange);
-    } else if (timeLeft < timeLeftInfo) {
+    } else if (timeLeft < timeLeftIndicator1) {
         pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
         pleddisp->setFrameColor(CRGB::LightBlue);
     }
 
-    return (timeLeft == 0);
+    return false;
+}
+
+enum Recycling CheckDateForRecycling() {
+    DBPrintln("CheckDateForRecycling");
+    DateTime tomorrow = (TIME_NOW + TIME_DAYINSECONDS);
+    uint8_t checkDate[][2] = {{tomorrow.day(),
+                               tomorrow.month()}};
+
+    const uint8_t datesCardboard[][2] = {{5, 1}, {2, 2}, {2, 3}, {30, 3}, {27, 4}, {22, 5}, {20, 6}, {17, 7}, {14, 8}, {12, 9}, {9, 11}, {7, 12}};  // DD,MM
+    const uint8_t datesPaper[][2] = {{26, 1}, {23, 2}, {23, 3}, {20, 4}, {18, 5}, {13, 6}, {17, 8}, {7, 9}, {5, 10}, {2, 11}, {30, 11}, {28, 12}};  // DD,MM
+    const uint8_t datesMetal[][2] = {{26, 1}};                                                                                                      // DD,MM
+
+    for (int i = 0; i < (sizeof(datesCardboard) / sizeof(datesCardboard[0])); i++) {
+        if ((datesCardboard[i][0] == checkDate[0][0]) &&
+            (datesCardboard[i][1] == checkDate[0][1])) {
+            DBPrintln("Tomorrow is recycling: Cardboard");
+            return Recycling::Cardboard;
+        }
+    }
+
+    for (int i = 0; i < (sizeof(datesPaper) / sizeof(datesPaper[0])); i++) {
+        if ((datesPaper[i][0] == checkDate[0][0]) &&
+            (datesPaper[i][1] == checkDate[0][1])) {
+            DBPrintln("Tomorrow is recycling: Paper");
+            return Recycling::Paper;
+        }
+    }
+
+    for (int i = 0; i < (sizeof(datesMetal) / sizeof(datesMetal[0])); i++) {
+        if ((datesMetal[i][0] == checkDate[0][0]) &&
+            (datesMetal[i][1] == checkDate[0][1])) {
+            DBPrintln("Tomorrow is recycling: Metal");
+            return Recycling::Metal;
+        }
+    }
+
+    return Recycling::None;
 }
