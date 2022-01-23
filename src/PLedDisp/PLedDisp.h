@@ -2,6 +2,13 @@
  * @file PLedDisp.h
  * @brief
  *
+ * Build instructions from https://www.instructables.com/Ping-Pong-Ball-LED-Clock/
+ * The following foreground and background modes can be mixed and matched!
+ * @version 2.0 - Refactored into class - Luca Mazzoleni
+ * @version 1.0 - Original Version - Yiwei Mao
+ * @github   https://github.com/YiweiMao
+ * @twitter  https://twitter.com/ewaymao
+ * @blog     https://yiweimao.github.io/blog/
  */
 
 #pragma once
@@ -29,7 +36,7 @@ class PLedDisp {
     enum class ModeFG { None,         // no op (time doesn't show)
                         Time,         // time
                         TimeRainbow,  // rainbow time,
-                        Cycle         // cycle through all digits
+                        Cycle         // cycle through all digits 0--9999 quickly
     };
 
     /**

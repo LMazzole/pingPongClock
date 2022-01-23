@@ -1,44 +1,18 @@
 /**
-    Ping Pong LED Clock
-    @file     pingPongClock.ino
-    @author   Yiwei Mao
-    @version  1.0.0
-    @email    ewaymao@gmail.com
-    @github   https://github.com/YiweiMao
-    @twitter  https://twitter.com/ewaymao
-    @blog     https://yiweimao.github.io/blog/
+ * @file main.cpp
+ * @brief PingPong-LedClock control with multiple features:
+ *  NTP-Synchronization for timekeeping without RTC
+ *  Recycling-Remineder for the next day
+ *  Timer/Indicator for train-departure in the morning
+ *  Philips-hue connectivity for presence-control
+ *
+ * Build for an ESP32
+ *
+ * @author Luca Mazzoleni
+ * @date 2022-01-23
+ *
+ */
 
-    Whole software fits on an Arduino (ATmega328P) Nano. Sketch compiles (without scrolling text support) to:
-    - Sketch uses 10236 bytes (33%) of program storage space. Maximum is 30720 bytes.
-    - Global variables use 1807 bytes (88%) of dynamic memory, leaving 241 bytes for local variables. Maximum is 2048 bytes.
-
-    Build instructions from https://www.instructables.com/Ping-Pong-Ball-LED-Clock/
-    The following foreground and background modes can be mixed and matched!
-
-    Foreground Modes: mode_fg
-    - 'T': Single colour time mode
-    - 'R': Scrolling rainbow time mode
-    - 'N': No time
-    - 'C': Cycle through all digits 0--9999 quickly
-    - is_slanted: Option to use slanted digits or original digits (from https://www.instructables.com/Ping-Pong-Ball-LED-Clock/)
-
-    Background Animation Modes: mode_bg
-    - 'R': Scrolling rainbow background
-    - 'B': No background
-    - 'T': Twinkle
-    - 'F': Fireworks
-    - 'W': Thunderstorm
-    - 'H': Firepit (works well with single colour time mode set to a light teal)
-
-    Improvements:
-    - Use a hardware RTC rather than use software
-    - Implement scolling text
-    - Use FastLED colour palettes
-    - Attach light sensor and auto-adjust FastLED brightness
-    - Attach PIR motion sensor and turn on display when there is someone to look at it
-    - Attach temperature/humidity/pressure sensor and display stats
-    - Connect to Wifi (e.g. using an ESP32)
-*/
 #include <Arduino.h>
 #include <NTPClient.h>
 #include <WiFi.h>
@@ -76,6 +50,8 @@ NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
 
 PLedDisp* pleddisp;  ///< Instance
 
+//==============================================================================================
+
 struct StateMachine {
     bool doInitAction = true;
     uint actualState = 0;
@@ -103,7 +79,8 @@ enum class StateTime { Idle,
                        Night };
 void UpdateTimeSma();
 
-uint NbrRepeatTrainAnimation = 0;
+//==============================================================================================
+
 /**
  * @brief Display a frame in 4 steps/different color as indicator for a timer.
  * Needs to be called every second.
@@ -120,7 +97,19 @@ enum class Recycling { None,
                        Cardboard,
                        Metal
 };
+
+/**
+ * @brief Check if and what needs to be recycled tomorrow
+ *
+ * @return enum Recycling - Typ of recycling
+ */
 enum Recycling CheckDateForRecycling();
+
+//==============================================================================================
+
+
+uint NbrRepeatTrainAnimation = 0;
+
 /**
  * The setup method used by the Arduino.
  */
@@ -168,6 +157,8 @@ void loop() {
     pleddisp->setWarning(3, true);
     pleddisp->update_LEDs();
 }
+
+//==============================================================================================
 
 void UpdateSerialSma() {
     switch (SmaSerial.actualState) {
@@ -340,13 +331,14 @@ void UpdateTimeSma() {
     uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_DAYINSECONDS;
     bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
 
+    // Define starttimes for different routines throuh the day
     const uint timeStartRoutineNight = 1 * TIME_MINUTEINSECONDS;                                       //[sec] 0:01
     const uint timeStartRoutineMorning = 6.5 * TIME_HOURINSECONDS;                                     //[sec] 6:30
     const uint timeStartRoutineMorningFirstTrain = 7 * TIME_HOURINSECONDS + 1 * TIME_MINUTEINSECONDS;  //[sec] 7:01
     const uint timeStartRoutineDay = 8.5 * TIME_HOURINSECONDS;                                         //[sec] 8:30
     const uint timeStartRoutineEvening = 17.50 * TIME_HOURINSECONDS;                                   //[sec] 17:30
     const uint brightnessHigh = 70;
-    const uint brightnessLow = 2;
+    const uint brightnessLow = 5;
 
     SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
     SmaTime.oldState = SmaTime.actualState;
@@ -512,6 +504,7 @@ enum Recycling CheckDateForRecycling() {
     uint8_t checkDate[][2] = {{tomorrow.day(),
                                tomorrow.month()}};
 
+    // Dates for recycling {DD,MM}
     const uint8_t datesCardboard[][2] = {{5, 1}, {2, 2}, {2, 3}, {30, 3}, {27, 4}, {22, 5}, {20, 6}, {17, 7}, {14, 8}, {12, 9}, {9, 11}, {7, 12}};  // DD,MM
     const uint8_t datesPaper[][2] = {{26, 1}, {23, 2}, {23, 3}, {20, 4}, {18, 5}, {13, 6}, {17, 8}, {7, 9}, {5, 10}, {2, 11}, {30, 11}, {28, 12}};  // DD,MM
     const uint8_t datesMetal[][2] = {{26, 1}};                                                                                                      // DD,MM

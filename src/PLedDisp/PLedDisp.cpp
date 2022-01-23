@@ -1,13 +1,6 @@
 /**
  * @file pLedDisp.cpp
- * @brief
- *
- * @author Luca Mazzoleni (luca_mazzoleni92@hotmail.com)
- *
- * @version 1.0 - Description - {author} - {date}
- *
  * @date 2022-01-05
- * @copyright Copyright (c) 2022
  *
  */
 
