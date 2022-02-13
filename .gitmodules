@@ -1,0 +1,3 @@
+[submodule "lib/hueDino"]
+	path = lib/hueDino
+	url = https://github.com/LMazzole/hueDino
