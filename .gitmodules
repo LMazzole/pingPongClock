@@ -1,3 +1,6 @@
 [submodule "lib/hueDino"]
 	path = lib/hueDino
 	url = https://github.com/LMazzole/hueDino
+[submodule "lib/ESP_Hue"]
+	path = lib/ESP_Hue
+	url = https://github.com/LMazzole/ESP_Hue
