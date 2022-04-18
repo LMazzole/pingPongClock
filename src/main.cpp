@@ -15,6 +15,7 @@
 
 #include <Arduino.h>
 #include <NTPClient.h>
+#include <Timezone.h>  // https://github.com/JChristensen/Timezone
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
@@ -39,14 +40,14 @@ const uint TIME_DAYINSECONDS = 24 * TIME_HOURINSECONDS;
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
 
-// Set offset time in seconds to adjust for your timezone, for example:
-// GMT +1 = 3600
-// GMT +8 = 28800
-// GMT -1 = -3600
-// GMT 0 = 0
-const int ntpTimeOffset = +1 * TIME_HOURINSECONDS;  // [sec] GMT +1
+const int ntpTimeOffset = 0 * TIME_HOURINSECONDS;  // [sec] 0 because Timezone will update
 const int ntpUpdateInterval = 5 * 60 * 1000;        // [ms] 5min
 NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
+
+// Central European Time (Frankfurt, Paris) GMT +1
+TimeChangeRule CEST = {"CEST", Last, Sun, Mar, 2, 120};  // Central European Summer Time
+TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};    // Central European Standard Time
+Timezone CE(CEST, CET);
 
 PLedDisp* pleddisp;  ///< Instance
 
@@ -146,7 +147,7 @@ void loop() {
     StatusNtpOk = timeClient.update();
     StatusWlanOk = (WiFi.status() == WL_CONNECTED);
     if (StatusNtpOk) {
-        RTC_TIME.adjust(DateTime(timeClient.getEpochTime()));
+        RTC_TIME.adjust(DateTime(CE.toLocal(timeClient.getEpochTime())));
     }
 
     UpdateTimeSma();
