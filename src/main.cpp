@@ -506,9 +506,9 @@ enum Recycling CheckDateForRecycling() {
                                tomorrow.month()}};
 
     // Dates for recycling {DD,MM}
-    const uint8_t datesCardboard[][2] = {{5, 1}, {2, 2}, {2, 3}, {30, 3}, {27, 4}, {22, 5}, {20, 6}, {17, 7}, {14, 8}, {12, 9}, {9, 11}, {7, 12}};  // DD,MM
-    const uint8_t datesPaper[][2] = {{26, 1}, {23, 2}, {23, 3}, {20, 4}, {18, 5}, {13, 6}, {17, 8}, {7, 9}, {5, 10}, {2, 11}, {30, 11}, {28, 12}};  // DD,MM
-    const uint8_t datesMetal[][2] = {{26, 1}};                                                                                                      // DD,MM
+    const uint8_t datesCardboard[][2] = {{4, 1}, {1, 2}, {1, 3}, {29, 3}, {26, 4}, {24, 5}, {21, 6}, {19, 7}, {16, 8}, {13, 9}, {11, 10}, {15, 11}, {13, 12}};  // DD,MM
+    const uint8_t datesPaper[][2] = {{25, 1}, {22, 2}, {22, 3}, {19, 4}, {17, 5}, {14, 6}, {12, 7}, {9, 8}, {6, 9}, {4, 10}, {8, 11}, {6, 12}};                 // DD,MM
+    const uint8_t datesMetal[][2] = {{15, 12}};                                                                                                                 // DD,MM
 
     for (int i = 0; i < (sizeof(datesCardboard) / sizeof(datesCardboard[0])); i++) {
         if ((datesCardboard[i][0] == checkDate[0][0]) &&
