@@ -57,6 +57,17 @@ TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};    // Central European Sta
 Timezone CE(CEST, CET);
 
 PLedDisp* pleddisp;  ///< Instance
+bool SleepActive;
+
+//===RTOS===
+TaskHandle_t TaskMain;
+void TaskMainCode(void* pvParameters);
+TaskHandle_t TaskLcd;
+void TaskLcdCode(void* pvParameters);
+TaskHandle_t TaskTime;
+void TaskTimeHandlingCode(void* pvParameters);
+TaskHandle_t TaskHue;
+void TaskHueCode(void* pvParameters);
 
 //==============================================================================================
 
@@ -114,7 +125,6 @@ enum class Recycling { None,
 enum Recycling CheckDateForRecycling();
 
 //==============================================================================================
-
 unsigned long currentMillis = 0;           ///< Current time for non blocking delay
 unsigned long previousMillisMovement = 0;  ///< Last time called for non blocking delay
 unsigned long timeSinceLastMovemet = 0;    //[ms]
@@ -126,32 +136,27 @@ const uint HueMotionSensorNbr[] = {47,   // Bad
 
 bool HueSensorDetectedMovement(uint timeout) {
     currentMillis = millis();
-    int refreshtime = 1000;  // ms
-    if ((currentMillis - previousMillisMovement) > refreshtime) {
-        // Serial.println("-=-");
-        // Serial.println((currentMillis - previousMillisMovement));
-        timeSinceLastMovemet += (currentMillis - previousMillisMovement);
-        previousMillisMovement = currentMillis;
+    timeSinceLastMovemet += (currentMillis - previousMillisMovement);
+    previousMillisMovement = currentMillis;
 
-        if (IdxMotionSensor >= (sizeof(HueMotionSensorNbr) / sizeof(HueMotionSensorNbr[0]) - 1)) {
-            IdxMotionSensor = 0;
-        }
-
-        String response = myHue.getSensorInfo(HueMotionSensorNbr[IdxMotionSensor]);
-        // Serial.println(HueMotionSensorNbr[IdxMotionSensor]);
-
-        //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
-        // Serial.println(response);
-        // Serial.println(response.substring(680, 750));
-        if (response.substring(680, 750).indexOf("\"presence\":true") != -1) {
-            Serial.println(String(HueMotionSensorNbr[IdxMotionSensor]) + " Presence: true");
-
-            timeSinceLastMovemet = 0;
-        }
-        IdxMotionSensor++;
-        // Serial.println(millis() - currentMillis);
-        // Serial.println("---");
+    if (IdxMotionSensor >= (sizeof(HueMotionSensorNbr) / sizeof(HueMotionSensorNbr[0]) - 1)) {
+        IdxMotionSensor = 0;
     }
+
+    String response = myHue.getSensorInfo(HueMotionSensorNbr[IdxMotionSensor]);
+    // Serial.println(HueMotionSensorNbr[IdxMotionSensor]);
+
+    //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
+    // Serial.println(response);
+    // Serial.println(response.substring(680, 750));
+    if (response.substring(680, 750).indexOf("\"presence\":true") != -1) {
+        Serial.println(String(HueMotionSensorNbr[IdxMotionSensor]) + " Presence: true");
+
+        timeSinceLastMovemet = 0;
+    }
+    IdxMotionSensor++;
+    // Serial.println(millis() - currentMillis);
+    // Serial.println("---");
 
     return (timeSinceLastMovemet < (timeout * 1000));
 }
@@ -184,43 +189,155 @@ void setup() {
     pleddisp = new PLedDisp();
 
     // hue.begin(HUE_USER);  // Start Hue
+
+    //===RTOS===
+    xTaskCreatePinnedToCore(
+        TaskTimeHandlingCode, /* Function to implement the task */
+        "TaskTime",           /* Name of the task */
+        10000,                /* Stack size in words */
+        NULL,                 /* Task input parameter */
+        1,                    /* Priority of the task */
+        &TaskTime,            /* Task handle. */
+        0);                   /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskHueCode, /* Function to implement the task */
+        "TaskTime",  /* Name of the task */
+        10000,       /* Stack size in words */
+        NULL,        /* Task input parameter */
+        1,           /* Priority of the task */
+        &TaskHue,    /* Task handle. */
+        1);          /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskMainCode, /* Function to implement the task */
+        "TaskMain",   /* Name of the task */
+        10000,        /* Stack size in words */
+        NULL,         /* Task input parameter */
+        1,            /* Priority of the task */
+        &TaskMain,    /* Task handle. */
+        1);           /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskLcdCode, /* Function to implement the task */
+        "TaskLcd",   /* Name of the task */
+        10000,       /* Stack size in words */
+        NULL,        /* Task input parameter */
+        2,           /* Priority of the task. 0 = lowest */
+        &TaskLcd,    /* Task handle. */
+        0);          /* Core where the task should run */
+    delay(500);
 }
 
 /**
- * The main runloop used by the Arduino.
+ * Task for updating time
+ * Runs every 20 ms on core 0
+ */
+void TaskTimeHandlingCode(void* pvParameters) {
+    DBPrint("TaskTimeHandlingCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = 20;  // ms
+    bool StatusNtpOk;
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        StatusNtpOk = timeClient.update();
+        if (StatusNtpOk) {
+            RTC_TIME.adjust(DateTime(CE.toLocal(timeClient.getEpochTime())));
+        }
+
+        TIME_NOW = RTC_TIME.now();
+    }
+}
+
+/**
+ * Task for interfacing with HUE bridge and motion detection
+ * Runs every 1 seconds on core 1
+ */
+void TaskHueCode(void* pvParameters) {
+    DBPrint("TaskHueCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = 1 * 1000;  // 1 sec
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        SleepActive = (HueSensorDetectedMovement(120) == false);
+    }
+}
+
+/**
+ * Task for updating display mode
+ * Runs every 5 seconds on core 1
+ */
+void TaskMainCode(void* pvParameters) {
+    DBPrint("TaskMainCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    const TickType_t xFrequency = 5 * 1000;  // 5 sec
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    bool StatusWlanOk;
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        StatusWlanOk = (WiFi.status() == WL_CONNECTED);
+
+        if (StatusWlanOk) {
+        }
+
+        // Set and Update warning LED's
+        pleddisp->setWarning(0, StatusWlanOk, 2);
+        // pleddisp->setWarning(1, StatusNtpOk);
+        pleddisp->setWarning(2, true, 2);
+        // pleddisp->setWarning(3, (HueSensorDetectedMovement(5) == false));
+
+        UpdateTimeSma();
+        // UpdateSerialSma();
+        if (SleepActive) {
+            pleddisp->setBrightness(0);
+        }
+    }
+}
+
+/**
+ * Task for updating display
+ * Runs every 50ms on core 0
+ */
+void TaskLcdCode(void* pvParameters) {
+    DBPrint("TaskLcdCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    const TickType_t xFrequency = 50;  // ms
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        pleddisp->update_LEDs();
+    }
+}
+
+/**
+ * ideal task
  */
 void loop() {
-    bool StatusNtpOk;
-    bool StatusWlanOk;
-
-    // UpdateSerialSma();
-
-    StatusNtpOk = timeClient.update();
-    StatusWlanOk = (WiFi.status() == WL_CONNECTED);
-    if (StatusNtpOk) {
-        RTC_TIME.adjust(DateTime(CE.toLocal(timeClient.getEpochTime())));
-    }
-
-    if (StatusWlanOk) {
-        // Serial.println("Last presence: " + response.substring(42, 63));
-
-        //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
-        //     hue.getLightIds();
-        //     // hue.getSensorLastMovement();
-        //     // hue.lightOn(13);
-        // delay(5000);
-        //     // hue.lightOff(13);
-        // delay(3000);
-    }
-
-    UpdateTimeSma();
-
-    // Set and Update warning LED's
-    pleddisp->setWarning(0, StatusWlanOk, 2);
-    pleddisp->setWarning(1, StatusNtpOk);
-    pleddisp->setWarning(2, true, 2);
-    // pleddisp->setWarning(3, (HueSensorDetectedMovement(5) == false));
-    pleddisp->update_LEDs();
 }
 
 //==============================================================================================
@@ -392,7 +509,6 @@ void UpdateSerialSma() {
 }
 
 void UpdateTimeSma() {
-    TIME_NOW = RTC_TIME.now();
     uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_DAYINSECONDS;
     bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
 
@@ -532,10 +648,6 @@ void UpdateTimeSma() {
 
         default:
             break;
-    }
-
-    if (HueSensorDetectedMovement(120) == false) {
-        pleddisp->setBrightness(0);
     }
 }
 
