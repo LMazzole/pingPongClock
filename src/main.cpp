@@ -22,6 +22,8 @@
 #include "LogConfiguration.h"
 #include "PLedDisp/PLedDisp.h"
 #include "WlanConfiguration.h"
+// #include <hueDino.h>
+#include <ESPHue.h>
 
 // Global Time keeping
 RTC_Millis RTC_TIME;
@@ -31,6 +33,7 @@ DateTime TIME_NOW;
 const char* ssid = DEFAULT_WIFI_SSID;            // "SSID"
 const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
 const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
+char hueBridge[] = HUE_BRIDGE_IP;                // hue bridge ip address ex: "192.168.1.3"
 
 // Time constants for easyier calculation
 const uint TIME_MINUTEINSECONDS = 60;
@@ -40,8 +43,12 @@ const uint TIME_DAYINSECONDS = 24 * TIME_HOURINSECONDS;
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
 
+WiFiClient wifi;
+ESPHue myHue = ESPHue(wifi, HUE_USER, hueBridge, 80);
+// hhueDino hue = hueDino(wifi, hueBridge);
+
 const int ntpTimeOffset = 0 * TIME_HOURINSECONDS;  // [sec] 0 because Timezone will update
-const int ntpUpdateInterval = 5 * 60 * 1000;        // [ms] 5min
+const int ntpUpdateInterval = 5 * 60 * 1000;       // [ms] 5min
 NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
 
 // Central European Time (Frankfurt, Paris) GMT +1
@@ -108,6 +115,48 @@ enum Recycling CheckDateForRecycling();
 
 //==============================================================================================
 
+unsigned long currentMillis = 0;           ///< Current time for non blocking delay
+unsigned long previousMillisMovement = 0;  ///< Last time called for non blocking delay
+unsigned long timeSinceLastMovemet = 0;    //[ms]
+uint IdxMotionSensor = 0;
+const uint HueMotionSensorNbr[] = {47,   // Bad
+                                   51,   // Küche
+                                   60,   // Gang
+                                   75};  // Kleiderschrank
+
+bool HueSensorDetectedMovement(uint timeout) {
+    currentMillis = millis();
+    int refreshtime = 1000;  // ms
+    if ((currentMillis - previousMillisMovement) > refreshtime) {
+        // Serial.println("-=-");
+        // Serial.println((currentMillis - previousMillisMovement));
+        timeSinceLastMovemet += (currentMillis - previousMillisMovement);
+        previousMillisMovement = currentMillis;
+
+        if (IdxMotionSensor >= (sizeof(HueMotionSensorNbr) / sizeof(HueMotionSensorNbr[0]) - 1)) {
+            IdxMotionSensor = 0;
+        }
+
+        String response = myHue.getSensorInfo(HueMotionSensorNbr[IdxMotionSensor]);
+        // Serial.println(HueMotionSensorNbr[IdxMotionSensor]);
+
+        //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
+        // Serial.println(response);
+        // Serial.println(response.substring(680, 750));
+        if (response.substring(680, 750).indexOf("\"presence\":true") != -1) {
+            Serial.println(String(HueMotionSensorNbr[IdxMotionSensor]) + " Presence: true");
+
+            timeSinceLastMovemet = 0;
+        }
+        IdxMotionSensor++;
+        // Serial.println(millis() - currentMillis);
+        // Serial.println("---");
+    }
+
+    return (timeSinceLastMovemet < (timeout * 1000));
+}
+
+//==============================================================================================
 
 uint NbrRepeatTrainAnimation = 0;
 
@@ -133,6 +182,8 @@ void setup() {
     timeClient.begin();
     RTC_TIME.begin(DateTime(F(__DATE__), F(__TIME__)));
     pleddisp = new PLedDisp();
+
+    // hue.begin(HUE_USER);  // Start Hue
 }
 
 /**
@@ -150,12 +201,25 @@ void loop() {
         RTC_TIME.adjust(DateTime(CE.toLocal(timeClient.getEpochTime())));
     }
 
+    if (StatusWlanOk) {
+        // Serial.println("Last presence: " + response.substring(42, 63));
+
+        //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
+        //     hue.getLightIds();
+        //     // hue.getSensorLastMovement();
+        //     // hue.lightOn(13);
+        // delay(5000);
+        //     // hue.lightOff(13);
+        // delay(3000);
+    }
+
     UpdateTimeSma();
 
+    // Set and Update warning LED's
     pleddisp->setWarning(0, StatusWlanOk, 2);
     pleddisp->setWarning(1, StatusNtpOk);
     pleddisp->setWarning(2, true, 2);
-    pleddisp->setWarning(3, true);
+    // pleddisp->setWarning(3, (HueSensorDetectedMovement(5) == false));
     pleddisp->update_LEDs();
 }
 
@@ -339,7 +403,7 @@ void UpdateTimeSma() {
     const uint timeStartRoutineDay = 8.5 * TIME_HOURINSECONDS;                                         //[sec] 8:30
     const uint timeStartRoutineEvening = 17.50 * TIME_HOURINSECONDS;                                   //[sec] 17:30
     const uint brightnessHigh = 70;
-    const uint brightnessLow = 5;
+    const uint brightnessLow = 10;
 
     SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
     SmaTime.oldState = SmaTime.actualState;
@@ -429,7 +493,7 @@ void UpdateTimeSma() {
                 switch (CheckDateForRecycling()) {
                     case Recycling::Cardboard:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
-                        pleddisp->setFrameColor(CRGB::SandyBrown);
+                        pleddisp->setFrameColor(CRGB::Beige);
                         break;
                     case Recycling::Paper:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
@@ -470,7 +534,12 @@ void UpdateTimeSma() {
             break;
     }
 
+    if (HueSensorDetectedMovement(120) == false) {
+        pleddisp->setBrightness(0);
+    }
 }
+
+//=====================================================================================
 
 bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsTimerEnds) {
     const uint timeLeftIndicator1 = 6 * TIME_MINUTEINSECONDS;  // Info

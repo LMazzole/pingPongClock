@@ -2,7 +2,7 @@
  * @file WlanConfiguration.h
  * @brief
  *
- * @author Luca Mazzoleni (luca_mazzoleni92@hotmail.com)
+ * @author L M
  *
  * @version 1.0 - Description - {author} - {date}
  *
