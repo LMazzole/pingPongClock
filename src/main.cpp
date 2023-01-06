@@ -22,6 +22,8 @@
 #include "LogConfiguration.h"
 #include "PLedDisp/PLedDisp.h"
 #include "WlanConfiguration.h"
+// #include <hueDino.h>
+#include <ESPHue.h>
 
 // Global Time keeping
 RTC_Millis RTC_TIME;
@@ -31,6 +33,7 @@ DateTime TIME_NOW;
 const char* ssid = DEFAULT_WIFI_SSID;            // "SSID"
 const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
 const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
+char hueBridge[] = HUE_BRIDGE_IP;                // hue bridge ip address ex: "192.168.1.3"
 
 // Time constants for easyier calculation
 const uint TIME_MINUTEINSECONDS = 60;
@@ -40,8 +43,12 @@ const uint TIME_DAYINSECONDS = 24 * TIME_HOURINSECONDS;
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
 
+WiFiClient wifi;
+ESPHue myHue = ESPHue(wifi, HUE_USER, hueBridge, 80);
+// hhueDino hue = hueDino(wifi, hueBridge);
+
 const int ntpTimeOffset = 0 * TIME_HOURINSECONDS;  // [sec] 0 because Timezone will update
-const int ntpUpdateInterval = 5 * 60 * 1000;        // [ms] 5min
+const int ntpUpdateInterval = 5 * 60 * 1000;       // [ms] 5min
 NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
 
 // Central European Time (Frankfurt, Paris) GMT +1
@@ -50,6 +57,17 @@ TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};    // Central European Sta
 Timezone CE(CEST, CET);
 
 PLedDisp* pleddisp;  ///< Instance
+bool SleepActive;
+
+//===RTOS===
+TaskHandle_t TaskMain;
+void TaskMainCode(void* pvParameters);
+TaskHandle_t TaskLcd;
+void TaskLcdCode(void* pvParameters);
+TaskHandle_t TaskTime;
+void TaskTimeHandlingCode(void* pvParameters);
+TaskHandle_t TaskHue;
+void TaskHueCode(void* pvParameters);
 
 //==============================================================================================
 
@@ -107,7 +125,43 @@ enum class Recycling { None,
 enum Recycling CheckDateForRecycling();
 
 //==============================================================================================
+unsigned long currentMillis = 0;           ///< Current time for non blocking delay
+unsigned long previousMillisMovement = 0;  ///< Last time called for non blocking delay
+unsigned long timeSinceLastMovemet = 0;    //[ms]
+uint IdxMotionSensor = 0;
+const uint HueMotionSensorNbr[] = {47,   // Bad
+                                   51,   // Küche
+                                   60,   // Gang
+                                   75};  // Kleiderschrank
 
+bool HueSensorDetectedMovement(uint timeout) {
+    currentMillis = millis();
+    timeSinceLastMovemet += (currentMillis - previousMillisMovement);
+    previousMillisMovement = currentMillis;
+
+    if (IdxMotionSensor >= (sizeof(HueMotionSensorNbr) / sizeof(HueMotionSensorNbr[0]) - 1)) {
+        IdxMotionSensor = 0;
+    }
+
+    String response = myHue.getSensorInfo(HueMotionSensorNbr[IdxMotionSensor]);
+    // Serial.println(HueMotionSensorNbr[IdxMotionSensor]);
+
+    //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
+    // Serial.println(response);
+    // Serial.println(response.substring(680, 750));
+    if (response.substring(680, 750).indexOf("\"presence\":true") != -1) {
+        Serial.println(String(HueMotionSensorNbr[IdxMotionSensor]) + " Presence: true");
+
+        timeSinceLastMovemet = 0;
+    }
+    IdxMotionSensor++;
+    // Serial.println(millis() - currentMillis);
+    // Serial.println("---");
+
+    return (timeSinceLastMovemet < (timeout * 1000));
+}
+
+//==============================================================================================
 
 uint NbrRepeatTrainAnimation = 0;
 
@@ -133,30 +187,157 @@ void setup() {
     timeClient.begin();
     RTC_TIME.begin(DateTime(F(__DATE__), F(__TIME__)));
     pleddisp = new PLedDisp();
+
+    // hue.begin(HUE_USER);  // Start Hue
+
+    //===RTOS===
+    xTaskCreatePinnedToCore(
+        TaskTimeHandlingCode, /* Function to implement the task */
+        "TaskTime",           /* Name of the task */
+        10000,                /* Stack size in words */
+        NULL,                 /* Task input parameter */
+        1,                    /* Priority of the task */
+        &TaskTime,            /* Task handle. */
+        0);                   /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskHueCode, /* Function to implement the task */
+        "TaskTime",  /* Name of the task */
+        10000,       /* Stack size in words */
+        NULL,        /* Task input parameter */
+        1,           /* Priority of the task */
+        &TaskHue,    /* Task handle. */
+        1);          /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskMainCode, /* Function to implement the task */
+        "TaskMain",   /* Name of the task */
+        10000,        /* Stack size in words */
+        NULL,         /* Task input parameter */
+        1,            /* Priority of the task */
+        &TaskMain,    /* Task handle. */
+        1);           /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskLcdCode, /* Function to implement the task */
+        "TaskLcd",   /* Name of the task */
+        10000,       /* Stack size in words */
+        NULL,        /* Task input parameter */
+        2,           /* Priority of the task. 0 = lowest */
+        &TaskLcd,    /* Task handle. */
+        0);          /* Core where the task should run */
+    delay(500);
 }
 
 /**
- * The main runloop used by the Arduino.
+ * Task for updating time
+ * Runs every 20 ms on core 0
+ */
+void TaskTimeHandlingCode(void* pvParameters) {
+    DBPrint("TaskTimeHandlingCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = 20;  // ms
+    bool StatusNtpOk;
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        StatusNtpOk = timeClient.update();
+        if (StatusNtpOk) {
+            RTC_TIME.adjust(DateTime(CE.toLocal(timeClient.getEpochTime())));
+        }
+
+        TIME_NOW = RTC_TIME.now();
+    }
+}
+
+/**
+ * Task for interfacing with HUE bridge and motion detection
+ * Runs every 1 seconds on core 1
+ */
+void TaskHueCode(void* pvParameters) {
+    DBPrint("TaskHueCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = 1 * 1000;  // 1 sec
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        SleepActive = (HueSensorDetectedMovement(120) == false);
+    }
+}
+
+/**
+ * Task for updating display mode
+ * Runs every 5 seconds on core 1
+ */
+void TaskMainCode(void* pvParameters) {
+    DBPrint("TaskMainCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    const TickType_t xFrequency = 5 * 1000;  // 5 sec
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    bool StatusWlanOk;
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        StatusWlanOk = (WiFi.status() == WL_CONNECTED);
+
+        if (StatusWlanOk) {
+        }
+
+        // Set and Update warning LED's
+        pleddisp->setWarning(0, StatusWlanOk, 2);
+        // pleddisp->setWarning(1, StatusNtpOk);
+        pleddisp->setWarning(2, true, 2);
+        // pleddisp->setWarning(3, (HueSensorDetectedMovement(5) == false));
+
+        UpdateTimeSma();
+        // UpdateSerialSma();
+        if (SleepActive) {
+            pleddisp->setBrightness(0);
+        }
+    }
+}
+
+/**
+ * Task for updating display
+ * Runs every 50ms on core 0
+ */
+void TaskLcdCode(void* pvParameters) {
+    DBPrint("TaskLcdCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    const TickType_t xFrequency = 50;  // ms
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        pleddisp->update_LEDs();
+    }
+}
+
+/**
+ * ideal task
  */
 void loop() {
-    bool StatusNtpOk;
-    bool StatusWlanOk;
-
-    // UpdateSerialSma();
-
-    StatusNtpOk = timeClient.update();
-    StatusWlanOk = (WiFi.status() == WL_CONNECTED);
-    if (StatusNtpOk) {
-        RTC_TIME.adjust(DateTime(CE.toLocal(timeClient.getEpochTime())));
-    }
-
-    UpdateTimeSma();
-
-    pleddisp->setWarning(0, StatusWlanOk, 2);
-    pleddisp->setWarning(1, StatusNtpOk);
-    pleddisp->setWarning(2, true, 2);
-    pleddisp->setWarning(3, true);
-    pleddisp->update_LEDs();
 }
 
 //==============================================================================================
@@ -328,7 +509,6 @@ void UpdateSerialSma() {
 }
 
 void UpdateTimeSma() {
-    TIME_NOW = RTC_TIME.now();
     uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_DAYINSECONDS;
     bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
 
@@ -339,7 +519,7 @@ void UpdateTimeSma() {
     const uint timeStartRoutineDay = 8.5 * TIME_HOURINSECONDS;                                         //[sec] 8:30
     const uint timeStartRoutineEvening = 17.50 * TIME_HOURINSECONDS;                                   //[sec] 17:30
     const uint brightnessHigh = 70;
-    const uint brightnessLow = 5;
+    const uint brightnessLow = 10;
 
     SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
     SmaTime.oldState = SmaTime.actualState;
@@ -429,7 +609,7 @@ void UpdateTimeSma() {
                 switch (CheckDateForRecycling()) {
                     case Recycling::Cardboard:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
-                        pleddisp->setFrameColor(CRGB::SandyBrown);
+                        pleddisp->setFrameColor(CRGB::Beige);
                         break;
                     case Recycling::Paper:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
@@ -469,8 +649,9 @@ void UpdateTimeSma() {
         default:
             break;
     }
-
 }
+
+//=====================================================================================
 
 bool SetTimerAnimation(uint timeSecondsPassedInDay, uint timeSecondsTimerEnds) {
     const uint timeLeftIndicator1 = 6 * TIME_MINUTEINSECONDS;  // Info
@@ -506,9 +687,9 @@ enum Recycling CheckDateForRecycling() {
                                tomorrow.month()}};
 
     // Dates for recycling {DD,MM}
-    const uint8_t datesCardboard[][2] = {{5, 1}, {2, 2}, {2, 3}, {30, 3}, {27, 4}, {22, 5}, {20, 6}, {17, 7}, {14, 8}, {12, 9}, {9, 11}, {7, 12}};  // DD,MM
-    const uint8_t datesPaper[][2] = {{26, 1}, {23, 2}, {23, 3}, {20, 4}, {18, 5}, {13, 6}, {17, 8}, {7, 9}, {5, 10}, {2, 11}, {30, 11}, {28, 12}};  // DD,MM
-    const uint8_t datesMetal[][2] = {{26, 1}};                                                                                                      // DD,MM
+    const uint8_t datesCardboard[][2] = {{4, 1}, {1, 2}, {1, 3}, {29, 3}, {26, 4}, {24, 5}, {21, 6}, {19, 7}, {16, 8}, {13, 9}, {11, 10}, {15, 11}, {13, 12}};  // DD,MM
+    const uint8_t datesPaper[][2] = {{25, 1}, {22, 2}, {22, 3}, {19, 4}, {17, 5}, {14, 6}, {12, 7}, {9, 8}, {6, 9}, {4, 10}, {8, 11}, {6, 12}};                 // DD,MM
+    const uint8_t datesMetal[][2] = {{15, 12}};                                                                                                                 // DD,MM
 
     for (int i = 0; i < (sizeof(datesCardboard) / sizeof(datesCardboard[0])); i++) {
         if ((datesCardboard[i][0] == checkDate[0][0]) &&
