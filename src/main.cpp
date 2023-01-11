@@ -275,6 +275,7 @@ void TaskHueCode(void* pvParameters) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
         SleepActive = (HueSensorDetectedMovement(120) == false);
+        uindebugTimeMs = uindebugTimeMs + (60 * 10);  // Simulation speed with 10 minutes per second
     }
 }
 
@@ -510,6 +511,10 @@ void UpdateSerialSma() {
 
 void UpdateTimeSma() {
     uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_DAYINSECONDS;
+    // uint timeSecondsPassedInDay = uindebugTimeMs % TIME_DAYINSECONDS;
+    // DBPrintln(timeSecondsPassedInDay);
+    // DBPrintln(timeSecondsPassedInDay / 60.0 / 60);
+
     bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
 
     // Define starttimes for different routines throuh the day
@@ -521,6 +526,16 @@ void UpdateTimeSma() {
     const uint brightnessHigh = 70;
     const uint brightnessLow = 10;
 
+    if ((timeSecondsPassedInDay >= timeStartRoutineNight) and (timeSecondsPassedInDay < timeStartRoutineMorning)) {
+        SmaTime.actualState = uint(StateTime::Night);
+    } else if ((timeSecondsPassedInDay >= timeStartRoutineMorning) and (timeSecondsPassedInDay < timeStartRoutineDay)) {
+        SmaTime.actualState = uint(StateTime::Morning);
+    } else if ((timeSecondsPassedInDay >= timeStartRoutineDay) and (timeSecondsPassedInDay < timeStartRoutineEvening)) {
+        SmaTime.actualState = uint(StateTime::Day);
+    } else if ((timeSecondsPassedInDay >= timeStartRoutineEvening) or (timeSecondsPassedInDay < timeStartRoutineNight)) {
+        SmaTime.actualState = uint(StateTime::Evening);
+    }
+
     SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
     SmaTime.oldState = SmaTime.actualState;
     if (SmaTime.doInitAction) {
@@ -528,6 +543,7 @@ void UpdateTimeSma() {
         DBPrintln(timeSecondsPassedInDay);
         DBPrintln(timeSecondsPassedInDay / 60.0 / 60);
     }
+
     switch (SmaTime.actualState) {
         case uint(StateTime::Idle):
             if (SmaTime.doInitAction) {
@@ -537,24 +553,8 @@ void UpdateTimeSma() {
                 pleddisp->setBrightness(brightnessHigh);
             }
 
-            if ((timeSecondsPassedInDay >= timeStartRoutineNight) and (timeSecondsPassedInDay < timeStartRoutineMorning)) {
-                SmaTime.actualState = uint(StateTime::Night);
-                break;
-            }
-            if ((timeSecondsPassedInDay >= timeStartRoutineMorning) and (timeSecondsPassedInDay < timeStartRoutineDay)) {
-                SmaTime.actualState = uint(StateTime::Morning);
-                break;
-            }
-            if ((timeSecondsPassedInDay >= timeStartRoutineDay) and (timeSecondsPassedInDay < timeStartRoutineEvening)) {
-                SmaTime.actualState = uint(StateTime::Day);
-                break;
-            }
-            if (timeSecondsPassedInDay >= timeStartRoutineEvening) {
-                SmaTime.actualState = uint(StateTime::Evening);
-                break;
-            }
-
             break;
+
         case uint(StateTime::Morning):
             if (SmaTime.doInitAction) {
                 DBPrintln("StateTime::Morning");
@@ -577,10 +577,6 @@ void UpdateTimeSma() {
                     DBPrintln(NbrRepeatTrainAnimation);
                 }
             }
-            if (timeSecondsPassedInDay >= timeStartRoutineDay) {
-                SmaTime.actualState = uint(StateTime::Day);
-                break;
-            }
             break;
         case uint(StateTime::Day):
             if (SmaTime.doInitAction) {
@@ -596,10 +592,6 @@ void UpdateTimeSma() {
             }
             pleddisp->setBrightness(brightnessHigh);
 
-            if (timeSecondsPassedInDay >= timeStartRoutineEvening) {
-                SmaTime.actualState = uint(StateTime::Evening);
-                break;
-            }
             break;
         case uint(StateTime::Evening):
             if (SmaTime.doInitAction) {
@@ -625,10 +617,6 @@ void UpdateTimeSma() {
             }
             pleddisp->setBrightness(brightnessHigh);
 
-            if ((timeSecondsPassedInDay >= timeStartRoutineNight) && (timeSecondsPassedInDay < timeStartRoutineMorning)) {
-                SmaTime.actualState = uint(StateTime::Night);
-                break;
-            }
             break;
         case uint(StateTime::Night):
             if (SmaTime.doInitAction) {
@@ -640,13 +628,11 @@ void UpdateTimeSma() {
             }
             pleddisp->setBrightness(brightnessLow);
 
-            if (timeSecondsPassedInDay == timeStartRoutineMorning) {
-                SmaTime.actualState = uint(StateTime::Morning);
-                break;
-            }
             break;
 
         default:
+            DBPrintln("StateTime::default");
+            DBPrintln(SmaTime.actualState);
             break;
     }
 }
