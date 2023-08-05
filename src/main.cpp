@@ -33,7 +33,6 @@ DateTime TIME_NOW;
 const char* ssid = DEFAULT_WIFI_SSID;            // "SSID"
 const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
 const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
-char hueBridge[] = HUE_BRIDGE_IP;                // hue bridge ip address ex: "192.168.1.3"
 
 // Time constants for easyier calculation
 const uint TIME_MINUTEINSECONDS = 60;
@@ -44,8 +43,6 @@ const uint TIME_DAYINSECONDS = 24 * TIME_HOURINSECONDS;
 WiFiUDP ntpUDP;
 
 WiFiClient wifi;
-ESPHue myHue = ESPHue(wifi, HUE_USER, hueBridge, 80);
-// hhueDino hue = hueDino(wifi, hueBridge);
 
 const int ntpTimeOffset = 0 * TIME_HOURINSECONDS;  // [sec] 0 because Timezone will update
 const int ntpUpdateInterval = 5 * 60 * 1000;       // [ms] 5min
@@ -57,7 +54,6 @@ TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};    // Central European Sta
 Timezone CE(CEST, CET);
 
 PLedDisp* pleddisp;  ///< Instance
-bool SleepActive;
 
 //===RTOS===
 TaskHandle_t TaskMain;
@@ -127,44 +123,11 @@ enum Recycling CheckDateForRecycling();
 //==============================================================================================
 unsigned long currentMillis = 0;           ///< Current time for non blocking delay
 unsigned long previousMillisMovement = 0;  ///< Last time called for non blocking delay
-unsigned long timeSinceLastMovemet = 0;    //[ms]
-uint IdxMotionSensor = 0;
-const uint HueMotionSensorNbr[] = {47,   // Bad
-                                   51,   // Küche
-                                   60,   // Gang
-                                   75};  // Kleiderschrank
-
-bool HueSensorDetectedMovement(uint timeout) {
-    currentMillis = millis();
-    timeSinceLastMovemet += (currentMillis - previousMillisMovement);
-    previousMillisMovement = currentMillis;
-
-    if (IdxMotionSensor >= (sizeof(HueMotionSensorNbr) / sizeof(HueMotionSensorNbr[0]) - 1)) {
-        IdxMotionSensor = 0;
-    }
-
-    String response = myHue.getSensorInfo(HueMotionSensorNbr[IdxMotionSensor]);
-    // Serial.println(HueMotionSensorNbr[IdxMotionSensor]);
-
-    //{"state":{"presence":false,"lastupdated":"2022-01-09T16:02:45"}
-    // Serial.println(response);
-    // Serial.println(response.substring(680, 750));
-    if (response.substring(680, 750).indexOf("\"presence\":true") != -1) {
-        Serial.println(String(HueMotionSensorNbr[IdxMotionSensor]) + " Presence: true");
-
-        timeSinceLastMovemet = 0;
-    }
-    IdxMotionSensor++;
-    // Serial.println(millis() - currentMillis);
-    // Serial.println("---");
-
-    return (timeSinceLastMovemet < (timeout * 1000));
-}
 
 //==============================================================================================
 
 uint NbrRepeatTrainAnimation = 0;
-
+uint uindebugTimeMs = 0;
 /**
  * The setup method used by the Arduino.
  */
@@ -199,16 +162,6 @@ void setup() {
         1,                    /* Priority of the task */
         &TaskTime,            /* Task handle. */
         0);                   /* Core where the task should run */
-    delay(500);
-
-    xTaskCreatePinnedToCore(
-        TaskHueCode, /* Function to implement the task */
-        "TaskTime",  /* Name of the task */
-        10000,       /* Stack size in words */
-        NULL,        /* Task input parameter */
-        1,           /* Priority of the task */
-        &TaskHue,    /* Task handle. */
-        1);          /* Core where the task should run */
     delay(500);
 
     xTaskCreatePinnedToCore(
@@ -259,27 +212,6 @@ void TaskTimeHandlingCode(void* pvParameters) {
 }
 
 /**
- * Task for interfacing with HUE bridge and motion detection
- * Runs every 1 seconds on core 1
- */
-void TaskHueCode(void* pvParameters) {
-    DBPrint("TaskHueCode running on core ");
-    DBPrintln(xPortGetCoreID());
-
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    const TickType_t xFrequency = 1 * 1000;  // 1 sec
-
-    for (;;) {
-        // Wait for the next cycle
-        xLastWakeTime = xTaskGetTickCount();
-        vTaskDelayUntil(&xLastWakeTime, xFrequency);
-
-        SleepActive = (HueSensorDetectedMovement(120) == false);
-        uindebugTimeMs = uindebugTimeMs + (60 * 10);  // Simulation speed with 10 minutes per second
-    }
-}
-
-/**
  * Task for updating display mode
  * Runs every 5 seconds on core 1
  */
@@ -305,13 +237,12 @@ void TaskMainCode(void* pvParameters) {
         pleddisp->setWarning(0, StatusWlanOk, 2);
         // pleddisp->setWarning(1, StatusNtpOk);
         pleddisp->setWarning(2, true, 2);
-        // pleddisp->setWarning(3, (HueSensorDetectedMovement(5) == false));
 
         UpdateTimeSma();
         // UpdateSerialSma();
-        if (SleepActive) {
-            pleddisp->setBrightness(0);
-        }
+        // if (SleepActive) {
+        //     pleddisp->setBrightness(0);
+        // }
     }
 }
 

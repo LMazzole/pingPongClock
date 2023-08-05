@@ -152,12 +152,12 @@ class PLedDisp {
     } Fr;
 
     CRGB leds[NUM_LEDS];  // Define the array of leds
-    DateTime now;         // time record
+    // DateTime now;         // time record
     CHSV bg_colour;
     int ErrorIndicator[4] = {};
     const int ErrorIndicatorAdr[4] = {118, 119, 127, 126};
-    const int REFRESH_RATE_HZ = 20;  // Refrasherate of LED's and animation
-    const int FRAME_TIME_MS = (1000 / REFRESH_RATE_HZ);
+    const int REFRESH_RATE_HZ = 50;  // Refrasherate of LED's and animation
+    const int FRAME_TIME_MS = (1000.0 / REFRESH_RATE_HZ);
     unsigned long currentMillis = 0;   ///< Current time for non blocking delay
     unsigned long previousMillis = 0;  ///< Last time called for non blocking delay
 
