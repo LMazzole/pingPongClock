@@ -8,7 +8,7 @@
  *
  * Build for an ESP32
  *
- * @author Luca Mazzoleni
+ * @author L M
  * @date 2022-01-23
  *
  */
@@ -21,18 +21,16 @@
 
 #include "LogConfiguration.h"
 #include "PLedDisp/PLedDisp.h"
-#include "WlanConfiguration.h"
-// #include <hueDino.h>
-#include <ESPHue.h>
+#include "secrets.h"
 
 // Global Time keeping
 RTC_Millis RTC_TIME;
 DateTime TIME_NOW;
 
 // Replace with your network credentials
-const char* ssid = DEFAULT_WIFI_SSID;            // "SSID"
-const char* password = DEFAULT_WIFI_PASSWORD;    // "PASSWORD"
-const char* poolServerName = "ch.pool.ntp.org";  // "time.nist.gov"
+const char* ssid = WIFI_SSID;                 // "SSID"
+const char* password = WIFI_PASSWORD;         // "PASSWORD"
+const char* poolServerName = NTP_SERVERNAME;  // "time.nist.gov"
 
 // Time constants for easyier calculation
 const uint TIME_MINUTEINSECONDS = 60;
