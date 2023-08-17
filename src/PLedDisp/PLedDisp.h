@@ -20,7 +20,7 @@
 #ifdef BUILD_FOR_NANO
 const int LED_PIN = 6;
 #elif BUILD_FOR_ESP32
-const int LED_PIN = 23;
+const int LED_PIN = 0;
 #endif
 const int NUM_LEDS = 128;  // Nbr of LEDS's in Display
 
@@ -33,6 +33,9 @@ extern DateTime TIME_NOW;
 class PLedDisp {
     //=====PUBLIC====================================================================================
    public:
+    /**
+     * @brief Foreground modes
+     */
     enum class ModeFG { None,         // no op (time doesn't show)
                         Time,         // time
                         TimeRainbow,  // rainbow time,
@@ -51,6 +54,9 @@ class PLedDisp {
                         Firepit            // Firepit (works well with single colour time mode set to a light teal)
     };
 
+    /**
+     * @brief Frame modes
+     */
     enum class ModeFR { None,        // No background
                         SolidColor,  // One color
                         Time         // Like a seconds display
