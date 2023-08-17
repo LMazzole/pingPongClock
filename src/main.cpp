@@ -14,7 +14,9 @@
  */
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <NTPClient.h>
+#include <PubSubClient.h>
 #include <Timezone.h>  // https://github.com/JChristensen/Timezone
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -26,11 +28,6 @@
 // Global Time keeping
 RTC_Millis RTC_TIME;
 DateTime TIME_NOW;
-
-// Replace with your network credentials
-const char* ssid = WIFI_SSID;                 // "SSID"
-const char* password = WIFI_PASSWORD;         // "PASSWORD"
-const char* poolServerName = NTP_SERVERNAME;  // "time.nist.gov"
 
 // Time constants for easyier calculation
 const uint TIME_MINUTEINSECONDS = 60;
@@ -44,7 +41,7 @@ WiFiClient wifi;
 
 const int ntpTimeOffset = 0 * TIME_HOURINSECONDS;  // [sec] 0 because Timezone will update
 const int ntpUpdateInterval = 5 * 60 * 1000;       // [ms] 5min
-NTPClient timeClient(ntpUDP, poolServerName, ntpTimeOffset, ntpUpdateInterval);
+NTPClient timeClient(ntpUDP, NTP_SERVERNAME, ntpTimeOffset, ntpUpdateInterval);
 
 // Central European Time (Frankfurt, Paris) GMT +1
 TimeChangeRule CEST = {"CEST", Last, Sun, Mar, 2, 120};  // Central European Summer Time
@@ -60,8 +57,8 @@ TaskHandle_t TaskLcd;
 void TaskLcdCode(void* pvParameters);
 TaskHandle_t TaskTime;
 void TaskTimeHandlingCode(void* pvParameters);
-TaskHandle_t TaskHue;
-void TaskHueCode(void* pvParameters);
+TaskHandle_t TaskMqtt;
+void TaskMqttCode(void* pvParameters);
 
 //==============================================================================================
 
@@ -126,6 +123,13 @@ unsigned long previousMillisMovement = 0;  ///< Last time called for non blockin
 
 uint NbrRepeatTrainAnimation = 0;
 uint uindebugTimeMs = 0;
+
+//=====MQTT=========================================================================================
+void callback(char* topic, byte* payload, unsigned int length);
+PubSubClient mqttClient(wifi);
+boolean reconnect();
+//==============================================================================================
+
 /**
  * The setup method used by the Arduino.
  */
@@ -136,7 +140,7 @@ void setup() {
     }
     DBPrintln("==Start Setup==");
 
-    WiFi.begin(ssid, password);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     while (WiFi.status() != WL_CONNECTED) {
         // wait for wlan to connect
@@ -149,7 +153,8 @@ void setup() {
     RTC_TIME.begin(DateTime(F(__DATE__), F(__TIME__)));
     pleddisp = new PLedDisp();
 
-    // hue.begin(HUE_USER);  // Start Hue
+    mqttClient.setServer(MQTT_SERVER, 1883);
+    mqttClient.setCallback(callback);
 
     //===RTOS===
     xTaskCreatePinnedToCore(
@@ -180,6 +185,16 @@ void setup() {
         2,           /* Priority of the task. 0 = lowest */
         &TaskLcd,    /* Task handle. */
         0);          /* Core where the task should run */
+    delay(500);
+
+    xTaskCreatePinnedToCore(
+        TaskMqttCode, /* Function to implement the task */
+        "TaskMqtt",   /* Name of the task */
+        10000,        /* Stack size in words */
+        NULL,         /* Task input parameter */
+        2,            /* Priority of the task. 0 = lowest */
+        &TaskMqtt,    /* Task handle. */
+        0);           /* Core where the task should run */
     delay(500);
 }
 
@@ -236,7 +251,7 @@ void TaskMainCode(void* pvParameters) {
         // pleddisp->setWarning(1, StatusNtpOk);
         pleddisp->setWarning(2, true, 2);
 
-        UpdateTimeSma();
+        // UpdateTimeSma();
         // UpdateSerialSma();
         // if (SleepActive) {
         //     pleddisp->setBrightness(0);
@@ -265,6 +280,29 @@ void TaskLcdCode(void* pvParameters) {
 }
 
 /**
+ * Task for updating display
+ * Runs every 50ms on core 0
+ */
+void TaskMqttCode(void* pvParameters) {
+    DBPrint("TaskMqttCode running on core ");
+    DBPrintln(xPortGetCoreID());
+
+    const TickType_t xFrequency = 50;  // ms
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    for (;;) {
+        // Wait for the next cycle
+        xLastWakeTime = xTaskGetTickCount();
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        if (!mqttClient.connected()) {
+            reconnect();
+        }
+        mqttClient.loop();
+    }
+}
+
+/**
  * ideal task
  */
 void loop() {
@@ -275,7 +313,8 @@ void loop() {
 void UpdateSerialSma() {
     switch (SmaSerial.actualState) {
         SmaSerial.doInitAction = (SmaSerial.oldState != SmaSerial.actualState);
-        SmaSerial.actualState = SmaSerial.oldState;
+        SmaSerial.oldState = SmaSerial.actualState;
+
         case uint(StateSerial::Idle):
             if (SmaSerial.doInitAction) {
             }
@@ -631,4 +670,140 @@ enum Recycling CheckDateForRecycling() {
     }
 
     return Recycling::None;
+}
+
+void callback(char* topic, byte* payload, unsigned int inputLength) {
+    DBPrint("Message arrived on topic: ");
+    DBPrintln(topic);
+    StaticJsonDocument<384> doc;
+
+    DeserializationError error = deserializeJson(doc, payload, inputLength);
+
+    if (error) {
+        DBPrint("deserializeJson() failed: ");
+        DBPrintln(error.c_str());
+        return;
+    }
+
+    //== Payload ==================================================
+    // https://arduinojson.org/v6/assistant/
+    // {
+    // // 1-100%
+    //         "Brightness": 100,
+    //         "Foreground": {
+    // // None, Time, TimeRainbow, Cycle
+    //             "Mode": "TimeRainbow",
+    // // true, false
+    //             "Slanted": true,
+    //             "Color": 10145074
+    //         },
+    //         "Background": {
+    // // None, SolidColor, ScrollingRainbow, Twinkle, Fireworks, Thunderstorm, Firepit
+    //             "Mode": "ScrollingRainbow",
+    //             "Color": 10145074
+    //         },
+    //         "Frame": {
+    // // None, SolidColor, Time
+    //             "Mode": "SolidColor",
+    //             "Color": 10145074
+    //         }
+    //     }
+
+    //== Brightness ==================================================
+    int Brightness = doc["Brightness"];  // 1 - 100
+    if (Brightness != 0) {
+        DBPrint("Mqtt Brightness: ");
+        DBPrintln(Brightness);
+        DBPrintln(map(Brightness, 1, 100, 0, 255));
+        pleddisp->setBrightness(map(Brightness, 1, 100, 0, 255));
+    }
+
+    //== Foreground ==================================================
+    JsonObject Foreground = doc["Foreground"];
+    String Foreground_Mode = Foreground["Mode"];      // "TimeRainbow"
+    bool Foreground_Slanted = Foreground["Slanted"];  // true
+    long Foreground_Color = Foreground["Color"];      // 10145074
+
+    DBPrint("Mqtt setForegroundMode: ");
+    DBPrint(Foreground_Mode);
+    DBPrint(", Slanted: ");
+    DBPrintln(Foreground_Slanted);
+    if (Foreground_Mode == "None") {
+        pleddisp->setForegroundMode(PLedDisp::ModeFG::None, Foreground_Slanted);
+    } else if (Foreground_Mode == "Time") {
+        pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, Foreground_Slanted);
+    } else if (Foreground_Mode == "TimeRainbow") {
+        pleddisp->setForegroundMode(PLedDisp::ModeFG::TimeRainbow, Foreground_Slanted);
+    } else if (Foreground_Mode == "Cycle") {
+        pleddisp->setForegroundMode(PLedDisp::ModeFG::Cycle, Foreground_Slanted);
+    } else {
+        DBPrintln("Foreground_Mode: Invalid");
+    }
+
+    if (Foreground_Color != 0) {
+        DBPrint("Mqtt setForegroundColor: ");
+        DBPrintln(Foreground_Color);
+        pleddisp->setForegroundColor(Foreground_Color);
+    }
+
+    //== Backround ==================================================
+    String Background_Mode = doc["Background"]["Mode"];  // "ScrollingRainbow"
+    long Background_Color = doc["Background"]["Color"];  // 10145074
+
+    DBPrint("Mqtt setBackgroundMode: ");
+    DBPrintln(Background_Mode);
+    if (Background_Mode == "None") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+    } else if (Background_Mode == "SolidColor") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::SolidColor);
+    } else if (Background_Mode == "ScrollingRainbow") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::ScrollingRainbow);
+    } else if (Background_Mode == "Twinkle") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Twinkle);
+    } else if (Background_Mode == "Fireworks") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Fireworks);
+    } else if (Background_Mode == "Thunderstorm") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Thunderstorm);
+    } else if (Background_Mode == "Firepit") {
+        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Firepit);
+    } else {
+        DBPrintln("Background_Mode: Invalid");
+    }
+
+    if (Background_Color != 0) {
+        DBPrint("Mqtt setBackgroundColor: ");
+        DBPrintln(Background_Color);
+        pleddisp->setBackgroundColor(Background_Color);
+    }
+
+    //== Frame ==================================================
+    String Frame_Mode = doc["Frame"]["Mode"];  // "SolidColor"
+    long Frame_Color = doc["Frame"]["Color"];  // 10145074
+
+    DBPrint("Mqtt setFrameMode: ");
+    DBPrintln(Frame_Mode);
+    if (Frame_Mode == "None") {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+    } else if (Frame_Mode == "SolidColor") {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
+    } else if (Frame_Mode == "Time") {
+        pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
+    } else {
+        DBPrintln("Frame_Mode: Invalid");
+    }
+    if (Frame_Color != 0) {
+        DBPrint("Mqtt setFrameColor: ");
+        DBPrintln(Frame_Color);
+        pleddisp->setFrameColor(Frame_Color);
+    }
+}
+
+boolean reconnect() {
+    if (mqttClient.connect("ESPClient", MQTT_USERNAME, MQTT_PASSWORD)) {
+        // Once connected, publish an announcement...
+        mqttClient.publish("home/hallway/clock", "Esp32-Clock connected");
+        // ... and resubscribe
+        mqttClient.subscribe("home/hallway/clock");
+    }
+    return mqttClient.connected();
 }
