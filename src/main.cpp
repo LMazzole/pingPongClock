@@ -129,6 +129,13 @@ void callback(char* topic, byte* payload, unsigned int length);
 PubSubClient mqttClient(wifi);
 bool reconnect();
 bool ClockInManualMode = false;
+// Dates for recycling {DD,MM}
+uint8_t recyclingCardboardDates[19][2];
+long recyclingCardboardColor = CRGB::Beige;
+uint8_t recyclingPaperDates[19][2];
+long recyclingPaperColor = CRGB::WhiteSmoke;
+uint8_t recyclingMetalDates[19][2];
+long recyclingMetalColor = CRGB::MediumBlue;
 //==============================================================================================
 
 /**
@@ -656,29 +663,29 @@ enum Recycling CheckDateForRecycling() {
                                tomorrow.month()}};
 
     // Dates for recycling {DD,MM}
-    const uint8_t datesCardboard[][2] = {{4, 1}, {1, 2}, {1, 3}, {29, 3}, {26, 4}, {24, 5}, {21, 6}, {19, 7}, {16, 8}, {13, 9}, {11, 10}, {15, 11}, {13, 12}};  // DD,MM
-    const uint8_t datesPaper[][2] = {{25, 1}, {22, 2}, {22, 3}, {19, 4}, {17, 5}, {14, 6}, {12, 7}, {9, 8}, {6, 9}, {4, 10}, {8, 11}, {6, 12}};                 // DD,MM
-    const uint8_t datesMetal[][2] = {{15, 12}};                                                                                                                 // DD,MM
+    // const uint8_t datesCardboard[][2] = {{4, 1}, {1, 2}, {1, 3}, {29, 3}, {26, 4}, {24, 5}, {21, 6}, {19, 7}, {16, 8}, {13, 9}, {11, 10}, {15, 11}, {13, 12}};  // DD,MM
+    // const uint8_t datesPaper[][2] = {{25, 1}, {22, 2}, {22, 3}, {19, 4}, {17, 5}, {14, 6}, {12, 7}, {9, 8}, {6, 9}, {4, 10}, {8, 11}, {6, 12}};                 // DD,MM
+    // const uint8_t datesMetal[][2] = {{15, 12}};                                                                                                                 // DD,MM
 
-    for (int i = 0; i < (sizeof(datesCardboard) / sizeof(datesCardboard[0])); i++) {
-        if ((datesCardboard[i][0] == checkDate[0][0]) &&
-            (datesCardboard[i][1] == checkDate[0][1])) {
+    for (int i = 0; i < (sizeof(recyclingCardboardDates) / sizeof(recyclingCardboardDates[0])); i++) {
+        if ((recyclingCardboardDates[i][0] == checkDate[0][0]) &&
+            (recyclingCardboardDates[i][1] == checkDate[0][1])) {
             DBPrintln("Tomorrow is recycling: Cardboard");
             return Recycling::Cardboard;
         }
     }
 
-    for (int i = 0; i < (sizeof(datesPaper) / sizeof(datesPaper[0])); i++) {
-        if ((datesPaper[i][0] == checkDate[0][0]) &&
-            (datesPaper[i][1] == checkDate[0][1])) {
+    for (int i = 0; i < (sizeof(recyclingPaperDates) / sizeof(recyclingPaperDates[0])); i++) {
+        if ((recyclingPaperDates[i][0] == checkDate[0][0]) &&
+            (recyclingPaperDates[i][1] == checkDate[0][1])) {
             DBPrintln("Tomorrow is recycling: Paper");
             return Recycling::Paper;
         }
     }
 
-    for (int i = 0; i < (sizeof(datesMetal) / sizeof(datesMetal[0])); i++) {
-        if ((datesMetal[i][0] == checkDate[0][0]) &&
-            (datesMetal[i][1] == checkDate[0][1])) {
+    for (int i = 0; i < (sizeof(recyclingMetalDates) / sizeof(recyclingMetalDates[0])); i++) {
+        if ((recyclingMetalDates[i][0] == checkDate[0][0]) &&
+            (recyclingMetalDates[i][1] == checkDate[0][1])) {
             DBPrintln("Tomorrow is recycling: Metal");
             return Recycling::Metal;
         }
@@ -718,6 +725,29 @@ void callback(char* topic, byte* payload, unsigned int inputLength) {
     // "Frame": {
     //     "Mode": "SolidColor",
     //     "Color": 10145074
+    // },
+    // "Recycling": {
+    //     "Paper": {
+    //     "Date": [
+    //         [  1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
+    //         [  1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    //     ],
+    //     "Color": 10145074
+    //     },
+    // "Cardboard": {
+    //     "Date": [
+    //         [  1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
+    //         [  1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    //     ],
+    //     "Color": 10145074
+    //     },
+    // "Metal": {
+    //     "Date": [
+    //         [  1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
+    //         [  1, 2, 3, 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    //     ],
+    //     "Color": 10145074
+    //     }
     // }
     // }
 
@@ -824,7 +854,56 @@ void callback(char* topic, byte* payload, unsigned int inputLength) {
         }
     }
 
-boolean reconnect() {
+    //== Recycling ==================================================
+    for (JsonPair Recycling_item : doc["Recycling"].as<JsonObject>()) {
+        String Recycling_item_key = Recycling_item.key().c_str();  // "Paper", "Cardboard", "Metal"
+        DBPrint("Mqtt Recycling_item: ");
+        DBPrintln(Recycling_item_key);
+
+        if (Recycling_item_key == "Paper") {
+            if (Recycling_item.value()["Color"] != 0) {
+                recyclingPaperColor = Recycling_item.value()["Color"];
+            }
+            JsonArray Recycling_item_value_Date_0 = Recycling_item.value()["Date"][0];
+            JsonArray Recycling_item_value_Date_1 = Recycling_item.value()["Date"][1];
+            for (int ii = 0; ii < (sizeof(recyclingPaperDates) / sizeof(recyclingPaperDates[0])); ii++) {
+                recyclingPaperDates[ii][0] = Recycling_item_value_Date_0[ii];
+                recyclingPaperDates[ii][1] = Recycling_item_value_Date_1[ii];
+                DBPrint(recyclingPaperDates[ii][0]);
+                DBPrint("/");
+                DBPrintln(recyclingPaperDates[ii][1]);
+            }
+        } else if (Recycling_item_key == "Cardboard") {
+            if (Recycling_item.value()["Color"] != 0) {
+                recyclingCardboardColor = Recycling_item.value()["Color"];
+            }
+            JsonArray Recycling_item_value_Date_0 = Recycling_item.value()["Date"][0];
+            JsonArray Recycling_item_value_Date_1 = Recycling_item.value()["Date"][1];
+            for (int ii = 0; ii < (sizeof(recyclingCardboardDates) / sizeof(recyclingCardboardDates[0])); ii++) {
+                recyclingCardboardDates[ii][0] = Recycling_item_value_Date_0[ii];
+                recyclingCardboardDates[ii][1] = Recycling_item_value_Date_1[ii];
+                DBPrint(recyclingCardboardDates[ii][0]);
+                DBPrint("/");
+                DBPrintln(recyclingCardboardDates[ii][1]);
+            }
+        } else if (Recycling_item_key == "Metal") {
+            if (Recycling_item.value()["Color"] != 0) {
+                recyclingMetalColor = Recycling_item.value()["Color"];
+            }
+            JsonArray Recycling_item_value_Date_0 = Recycling_item.value()["Date"][0];
+            JsonArray Recycling_item_value_Date_1 = Recycling_item.value()["Date"][1];
+            for (int ii = 0; ii < (sizeof(recyclingMetalDates) / sizeof(recyclingMetalDates[0])); ii++) {
+                recyclingMetalDates[ii][0] = Recycling_item_value_Date_0[ii];
+                recyclingMetalDates[ii][1] = Recycling_item_value_Date_1[ii];
+                DBPrint(recyclingMetalDates[ii][0]);
+                DBPrint("/");
+                DBPrintln(recyclingMetalDates[ii][1]);
+            }
+        }
+    }
+}
+
+bool reconnect() {
     if (mqttClient.connect("ESPClient", MQTT_USERNAME, MQTT_PASSWORD)) {
         // Once connected, publish an announcement...
         mqttClient.publish("home/hallway/clock", "Esp32-Clock connected");
