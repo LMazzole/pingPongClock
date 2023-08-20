@@ -127,7 +127,8 @@ uint uindebugTimeMs = 0;
 //=====MQTT=========================================================================================
 void callback(char* topic, byte* payload, unsigned int length);
 PubSubClient mqttClient(wifi);
-boolean reconnect();
+bool reconnect();
+bool ClockInManualMode = false;
 //==============================================================================================
 
 /**
@@ -138,16 +139,17 @@ void setup() {
     while (!Serial) {
         // wait for serial port to connect. Needed for native USB port only
     }
-    DBPrintln("==Start Setup==");
+    DBPrintln("== Setup: Start ==");
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
+    DBPrintln("Establishing WLAN connection");
     while (WiFi.status() != WL_CONNECTED) {
         // wait for wlan to connect
         delay(500);
-        Serial.print(".");
+        DBPrint(".");
     }
-    Serial.println(" WLAN connected.");
+    DBPrintln("")
+        DBPrintln("WLAN connected.");
 
     timeClient.begin();
     RTC_TIME.begin(DateTime(F(__DATE__), F(__TIME__)));
@@ -157,45 +159,47 @@ void setup() {
     mqttClient.setCallback(callback);
 
     //===RTOS===
-    xTaskCreatePinnedToCore(
+    xTaskCreate(
         TaskTimeHandlingCode, /* Function to implement the task */
         "TaskTime",           /* Name of the task */
         10000,                /* Stack size in words */
         NULL,                 /* Task input parameter */
         1,                    /* Priority of the task */
-        &TaskTime,            /* Task handle. */
-        0);                   /* Core where the task should run */
+        &TaskTime);           /* Task handle. */
+    // 0);                   /* Core where the task should run */
     delay(500);
 
-    xTaskCreatePinnedToCore(
+    xTaskCreate(
         TaskMainCode, /* Function to implement the task */
         "TaskMain",   /* Name of the task */
         10000,        /* Stack size in words */
         NULL,         /* Task input parameter */
         1,            /* Priority of the task */
-        &TaskMain,    /* Task handle. */
-        1);           /* Core where the task should run */
+        &TaskMain);   /* Task handle. */
+    // 1);           /* Core where the task should run */
     delay(500);
 
-    xTaskCreatePinnedToCore(
+    xTaskCreate(
         TaskLcdCode, /* Function to implement the task */
         "TaskLcd",   /* Name of the task */
         10000,       /* Stack size in words */
         NULL,        /* Task input parameter */
         2,           /* Priority of the task. 0 = lowest */
-        &TaskLcd,    /* Task handle. */
-        0);          /* Core where the task should run */
+        &TaskLcd);   /* Task handle. */
+    // 0);          /* Core where the task should run */
     delay(500);
 
-    xTaskCreatePinnedToCore(
+    xTaskCreate(
         TaskMqttCode, /* Function to implement the task */
         "TaskMqtt",   /* Name of the task */
         10000,        /* Stack size in words */
         NULL,         /* Task input parameter */
         2,            /* Priority of the task. 0 = lowest */
-        &TaskMqtt,    /* Task handle. */
-        0);           /* Core where the task should run */
+        &TaskMqtt);   /* Task handle. */
+    // 0);           /* Core where the task should run */
     delay(500);
+
+    DBPrintln("== Setup: End ==");
 }
 
 /**
@@ -232,7 +236,7 @@ void TaskMainCode(void* pvParameters) {
     DBPrint("TaskMainCode running on core ");
     DBPrintln(xPortGetCoreID());
 
-    const TickType_t xFrequency = 5 * 1000;  // 5 sec
+    const TickType_t xFrequency = 1 * 1000;  // sec
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
     bool StatusWlanOk;
@@ -251,7 +255,12 @@ void TaskMainCode(void* pvParameters) {
         // pleddisp->setWarning(1, StatusNtpOk);
         pleddisp->setWarning(2, true, 2);
 
-        // UpdateTimeSma();
+        if (ClockInManualMode == false) {
+            UpdateTimeSma();
+        } else {
+            SmaTime.oldState = 99;  // Trigger initOnce again
+        }
+
         // UpdateSerialSma();
         // if (SleepActive) {
         //     pleddisp->setBrightness(0);
@@ -479,10 +488,6 @@ void UpdateSerialSma() {
 
 void UpdateTimeSma() {
     uint timeSecondsPassedInDay = TIME_NOW.unixtime() % TIME_DAYINSECONDS;
-    // uint timeSecondsPassedInDay = uindebugTimeMs % TIME_DAYINSECONDS;
-    // DBPrintln(timeSecondsPassedInDay);
-    // DBPrintln(timeSecondsPassedInDay / 60.0 / 60);
-
     bool DayIsWeekend = ((TIME_NOW.dayOfTheWeek() == 6) || (TIME_NOW.dayOfTheWeek() == 0));
 
     // Define starttimes for different routines throuh the day
@@ -507,9 +512,13 @@ void UpdateTimeSma() {
     SmaTime.doInitAction = (SmaTime.oldState != SmaTime.actualState);
     SmaTime.oldState = SmaTime.actualState;
     if (SmaTime.doInitAction) {
+        DBPrint("actualState");
         DBPrintln(SmaTime.actualState);
-        DBPrintln(timeSecondsPassedInDay);
-        DBPrintln(timeSecondsPassedInDay / 60.0 / 60);
+        DBPrint("Time: Seconds in Day passed:");
+        DBPrint(timeSecondsPassedInDay);
+        DBPrint(" -> ");
+        DBPrint(timeSecondsPassedInDay / 60.0 / 60);
+        DBPrintln("h");
     }
 
     switch (SmaTime.actualState) {
@@ -518,7 +527,10 @@ void UpdateTimeSma() {
                 DBPrintln("StateTime::Idle");
                 // Set defaults
                 pleddisp->setForegroundColor(CRGB::Peru);
-                pleddisp->setBrightness(brightnessHigh);
+                pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+                pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                // pleddisp->setBrightness(brightnessHigh);
             }
 
             break;
@@ -532,7 +544,7 @@ void UpdateTimeSma() {
                 pleddisp->setFrameMode(PLedDisp::ModeFR::None);
                 pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
             }
-            pleddisp->setBrightness(brightnessHigh);
+            // pleddisp->setBrightness(brightnessHigh);
 
             if (NbrRepeatTrainAnimation < 4) {
                 uint timeAlarmForNextTrain = timeStartRoutineMorningFirstTrain;                  // DayTime s when next train leaves
@@ -552,38 +564,41 @@ void UpdateTimeSma() {
 
                 pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
                 pleddisp->setFrameMode(PLedDisp::ModeFR::None);
-                if (DayIsWeekend) {
-                    pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
-                } else {
-                    pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
-                }
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                // if (DayIsWeekend) {
+                //     pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                // } else {
+                //     pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
+                // }
             }
-            pleddisp->setBrightness(brightnessHigh);
+            // pleddisp->setBrightness(brightnessHigh);
 
             break;
         case uint(StateTime::Evening):
             if (SmaTime.doInitAction) {
                 DBPrintln("StateTime::Evening");
-
+                pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+                pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
                 // Check for ToDoTasks for the next day
                 switch (CheckDateForRecycling()) {
                     case Recycling::Cardboard:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
-                        pleddisp->setFrameColor(CRGB::Beige);
+                        pleddisp->setFrameColor(recyclingCardboardColor);
                         break;
                     case Recycling::Paper:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
-                        pleddisp->setFrameColor(CRGB::WhiteSmoke);
+                        pleddisp->setFrameColor(recyclingPaperColor);
                         break;
                     case Recycling::Metal:
                         pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
-                        pleddisp->setFrameColor(CRGB::MediumBlue);
+                        pleddisp->setFrameColor(recyclingMetalColor);
                         break;
                     default:
                         break;
                 };
             }
-            pleddisp->setBrightness(brightnessHigh);
+            // pleddisp->setBrightness(brightnessHigh);
 
             break;
         case uint(StateTime::Night):
@@ -592,9 +607,9 @@ void UpdateTimeSma() {
                 // Turn off
                 pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
                 pleddisp->setFrameMode(PLedDisp::ModeFR::None);
-                pleddisp->setForegroundMode(PLedDisp::ModeFG::None, true);
+                pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, true);
             }
-            pleddisp->setBrightness(brightnessLow);
+            // pleddisp->setBrightness(brightnessLow);
 
             break;
 
@@ -673,10 +688,11 @@ enum Recycling CheckDateForRecycling() {
 }
 
 void callback(char* topic, byte* payload, unsigned int inputLength) {
+    DBPrintln("===========================================");
     DBPrint("Message arrived on topic: ");
     DBPrintln(topic);
-    StaticJsonDocument<384> doc;
-
+    // StaticJsonDocument<3072> doc;
+    DynamicJsonDocument doc(3072);
     DeserializationError error = deserializeJson(doc, payload, inputLength);
 
     if (error) {
@@ -688,115 +704,125 @@ void callback(char* topic, byte* payload, unsigned int inputLength) {
     //== Payload ==================================================
     // https://arduinojson.org/v6/assistant/
     // {
-    // // 1-100%
-    //         "Brightness": 100,
-    //         "Foreground": {
-    // // None, Time, TimeRainbow, Cycle
-    //             "Mode": "TimeRainbow",
-    // // true, false
-    //             "Slanted": true,
-    //             "Color": 10145074
-    //         },
-    //         "Background": {
-    // // None, SolidColor, ScrollingRainbow, Twinkle, Fireworks, Thunderstorm, Firepit
-    //             "Mode": "ScrollingRainbow",
-    //             "Color": 10145074
-    //         },
-    //         "Frame": {
-    // // None, SolidColor, Time
-    //             "Mode": "SolidColor",
-    //             "Color": 10145074
-    //         }
-    //     }
+    // "Brightness": 100,
+    // "Mode": "Manual",
+    // "Foreground": {
+    //     "Mode": "TimeRainbow",
+    //     "Slanted": true,
+    //     "Color": 10145074
+    // },
+    // "Background": {
+    //     "Mode": "ScrollingRainbow",
+    //     "Color": 10145074
+    // },
+    // "Frame": {
+    //     "Mode": "SolidColor",
+    //     "Color": 10145074
+    // }
+    // }
 
     //== Brightness ==================================================
+    String Mode = doc["Mode"];  // "Manual"
+    if ((Mode == "Auto") || (Mode == "Automatic")) {
+        DBPrint("Mqtt Mode: ");
+        DBPrintln(Mode);
+        ClockInManualMode = false;
+    } else if (Mode == "Manual") {
+        DBPrint("Mqtt Mode: ");
+        DBPrintln(Mode);
+        ClockInManualMode = true;
+    }
+
     int Brightness = doc["Brightness"];  // 1 - 100
     if (Brightness != 0) {
         DBPrint("Mqtt Brightness: ");
-        DBPrintln(Brightness);
-        DBPrintln(map(Brightness, 1, 100, 0, 255));
+        DBPrint(Brightness);
+        DBPrint(" % / ");
+        DBPrint(map(Brightness, 1, 100, 0, 255));
+        DBPrintln(" abs");
         pleddisp->setBrightness(map(Brightness, 1, 100, 0, 255));
     }
 
-    //== Foreground ==================================================
-    JsonObject Foreground = doc["Foreground"];
-    String Foreground_Mode = Foreground["Mode"];      // "TimeRainbow"
-    bool Foreground_Slanted = Foreground["Slanted"];  // true
-    long Foreground_Color = Foreground["Color"];      // 10145074
+    if (ClockInManualMode) {
+        //== Foreground ==================================================
+        JsonObject Foreground = doc["Foreground"];
+        String Foreground_Mode = Foreground["Mode"];      // "TimeRainbow"
+        bool Foreground_Slanted = Foreground["Slanted"];  // true
+        long Foreground_Color = Foreground["Color"];      // 10145074
 
-    DBPrint("Mqtt setForegroundMode: ");
-    DBPrint(Foreground_Mode);
-    DBPrint(", Slanted: ");
-    DBPrintln(Foreground_Slanted);
-    if (Foreground_Mode == "None") {
-        pleddisp->setForegroundMode(PLedDisp::ModeFG::None, Foreground_Slanted);
-    } else if (Foreground_Mode == "Time") {
-        pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, Foreground_Slanted);
-    } else if (Foreground_Mode == "TimeRainbow") {
-        pleddisp->setForegroundMode(PLedDisp::ModeFG::TimeRainbow, Foreground_Slanted);
-    } else if (Foreground_Mode == "Cycle") {
-        pleddisp->setForegroundMode(PLedDisp::ModeFG::Cycle, Foreground_Slanted);
-    } else {
-        DBPrintln("Foreground_Mode: Invalid");
+        DBPrint("Mqtt setForegroundMode: ");
+        DBPrint(Foreground_Mode);
+        DBPrint(", Slanted: ");
+        DBPrintln(Foreground_Slanted);
+        if (Foreground_Mode == "None") {
+            pleddisp->setForegroundMode(PLedDisp::ModeFG::None, Foreground_Slanted);
+        } else if (Foreground_Mode == "Time") {
+            pleddisp->setForegroundMode(PLedDisp::ModeFG::Time, Foreground_Slanted);
+        } else if (Foreground_Mode == "TimeRainbow") {
+            pleddisp->setForegroundMode(PLedDisp::ModeFG::TimeRainbow, Foreground_Slanted);
+        } else if (Foreground_Mode == "Cycle") {
+            pleddisp->setForegroundMode(PLedDisp::ModeFG::Cycle, Foreground_Slanted);
+        } else {
+            DBPrintln("Foreground_Mode: Invalid");
+        }
+
+        if (Foreground_Color != 0) {
+            DBPrint("Mqtt setForegroundColor: ");
+            DBPrintln(Foreground_Color);
+            pleddisp->setForegroundColor(Foreground_Color);
+        }
+
+        //== Backround ==================================================
+        String Background_Mode = doc["Background"]["Mode"];  // "ScrollingRainbow"
+        long Background_Color = doc["Background"]["Color"];  // 10145074
+
+        DBPrint("Mqtt setBackgroundMode: ");
+        DBPrintln(Background_Mode);
+        if (Background_Mode == "None") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
+        } else if (Background_Mode == "SolidColor") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::SolidColor);
+        } else if (Background_Mode == "ScrollingRainbow") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::ScrollingRainbow);
+        } else if (Background_Mode == "Twinkle") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::Twinkle);
+        } else if (Background_Mode == "Fireworks") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::Fireworks);
+        } else if (Background_Mode == "Thunderstorm") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::Thunderstorm);
+        } else if (Background_Mode == "Firepit") {
+            pleddisp->setBackgroundMode(PLedDisp::ModeBG::Firepit);
+        } else {
+            DBPrintln("Background_Mode: Invalid");
+        }
+
+        if (Background_Color != 0) {
+            DBPrint("Mqtt setBackgroundColor: ");
+            DBPrintln(Background_Color);
+            pleddisp->setBackgroundColor(Background_Color);
+        }
+
+        //== Frame ==================================================
+        String Frame_Mode = doc["Frame"]["Mode"];  // "SolidColor"
+        long Frame_Color = doc["Frame"]["Color"];  // 10145074
+
+        DBPrint("Mqtt setFrameMode: ");
+        DBPrintln(Frame_Mode);
+        if (Frame_Mode == "None") {
+            pleddisp->setFrameMode(PLedDisp::ModeFR::None);
+        } else if (Frame_Mode == "SolidColor") {
+            pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
+        } else if (Frame_Mode == "Time") {
+            pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
+        } else {
+            DBPrintln("Frame_Mode: Invalid");
+        }
+        if (Frame_Color != 0) {
+            DBPrint("Mqtt setFrameColor: ");
+            DBPrintln(Frame_Color);
+            pleddisp->setFrameColor(Frame_Color);
+        }
     }
-
-    if (Foreground_Color != 0) {
-        DBPrint("Mqtt setForegroundColor: ");
-        DBPrintln(Foreground_Color);
-        pleddisp->setForegroundColor(Foreground_Color);
-    }
-
-    //== Backround ==================================================
-    String Background_Mode = doc["Background"]["Mode"];  // "ScrollingRainbow"
-    long Background_Color = doc["Background"]["Color"];  // 10145074
-
-    DBPrint("Mqtt setBackgroundMode: ");
-    DBPrintln(Background_Mode);
-    if (Background_Mode == "None") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::None);
-    } else if (Background_Mode == "SolidColor") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::SolidColor);
-    } else if (Background_Mode == "ScrollingRainbow") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::ScrollingRainbow);
-    } else if (Background_Mode == "Twinkle") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Twinkle);
-    } else if (Background_Mode == "Fireworks") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Fireworks);
-    } else if (Background_Mode == "Thunderstorm") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Thunderstorm);
-    } else if (Background_Mode == "Firepit") {
-        pleddisp->setBackgroundMode(PLedDisp::ModeBG::Firepit);
-    } else {
-        DBPrintln("Background_Mode: Invalid");
-    }
-
-    if (Background_Color != 0) {
-        DBPrint("Mqtt setBackgroundColor: ");
-        DBPrintln(Background_Color);
-        pleddisp->setBackgroundColor(Background_Color);
-    }
-
-    //== Frame ==================================================
-    String Frame_Mode = doc["Frame"]["Mode"];  // "SolidColor"
-    long Frame_Color = doc["Frame"]["Color"];  // 10145074
-
-    DBPrint("Mqtt setFrameMode: ");
-    DBPrintln(Frame_Mode);
-    if (Frame_Mode == "None") {
-        pleddisp->setFrameMode(PLedDisp::ModeFR::None);
-    } else if (Frame_Mode == "SolidColor") {
-        pleddisp->setFrameMode(PLedDisp::ModeFR::SolidColor);
-    } else if (Frame_Mode == "Time") {
-        pleddisp->setFrameMode(PLedDisp::ModeFR::Time);
-    } else {
-        DBPrintln("Frame_Mode: Invalid");
-    }
-    if (Frame_Color != 0) {
-        DBPrint("Mqtt setFrameColor: ");
-        DBPrintln(Frame_Color);
-        pleddisp->setFrameColor(Frame_Color);
-    }
-}
 
 boolean reconnect() {
     if (mqttClient.connect("ESPClient", MQTT_USERNAME, MQTT_PASSWORD)) {

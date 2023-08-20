@@ -1,0 +1,1328 @@
+[
+    {
+        "id": "735deefdd37fe4b9",
+        "type": "tab",
+        "label": "Hallway/Clock",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "e9ad3882d9d301f6",
+        "type": "mqtt in",
+        "z": "735deefdd37fe4b9",
+        "name": "",
+        "topic": "home/hallway/clock",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "8e1ca31fe77bae5b",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 1110,
+        "y": 80,
+        "wires": [
+            [
+                "5d4d775572bbe89c"
+            ]
+        ]
+    },
+    {
+        "id": "5d4d775572bbe89c",
+        "type": "debug",
+        "z": "735deefdd37fe4b9",
+        "name": "debug 3",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1340,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "617f1f8352e4f317",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Mode Auto",
+        "props": [
+            {
+                "p": "payload.Mode",
+                "v": "Auto",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Mode",
+                "v": "None",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Slanted",
+                "v": "true",
+                "vt": "bool"
+            },
+            {
+                "p": "payload.Foreground.Color",
+                "v": "13468991",
+                "vt": "num"
+            },
+            {
+                "p": "payload.Background.Mode",
+                "v": "ScrollingRainbow",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Frame.Mode",
+                "v": "None",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Frame.Color",
+                "v": "13468991",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 180,
+        "y": 60,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "6e159518a2ed4287",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - ScrollingRainbow",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "ScrollingRainbow",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 700,
+        "y": 620,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "c837fd7edb3caa93",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Mode - Time",
+        "props": [
+            {
+                "p": "payload.Foreground.Mode",
+                "v": "Time",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Slanted",
+                "v": "true",
+                "vt": "bool"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 220,
+        "y": 580,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "dd93d963458965c1",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Mode - Time",
+        "props": [
+            {
+                "p": "payload.Frame.Mode",
+                "v": "Time",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1060,
+        "y": 580,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "e62bba3bd640f33a",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Mode Manual",
+        "props": [
+            {
+                "p": "payload.Mode",
+                "v": "Manual",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Mode",
+                "v": "None",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Slanted",
+                "v": "true",
+                "vt": "bool"
+            },
+            {
+                "p": "payload.Background.Mode",
+                "v": "None",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Frame.Mode",
+                "v": "None",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 190,
+        "y": 100,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "069276ac4ce613a0",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Britghness High",
+        "props": [
+            {
+                "p": "payload.Brightness",
+                "v": "80",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 640,
+        "y": 60,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "1424a6a343f1174b",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Britghness Low",
+        "props": [
+            {
+                "p": "payload.Brightness",
+                "v": "15",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 640,
+        "y": 100,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "6f1b9b7214cc73c1",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Britghness Off",
+        "props": [
+            {
+                "p": "payload.Brightness",
+                "v": "1",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 630,
+        "y": 140,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "5e5a4ac0b4b74ed7",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - Beige",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "16119260",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 230,
+        "y": 240,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "c42aa0103b58efbe",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Mode - None",
+        "props": [
+            {
+                "p": "payload.Foreground.Mode",
+                "v": "None",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Slanted",
+                "v": "true",
+                "vt": "bool"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 220,
+        "y": 540,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "2410f01dfe710408",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Mode - TimeRainbow",
+        "props": [
+            {
+                "p": "payload.Foreground.Mode",
+                "v": "TimeRainbow",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Slanted",
+                "v": "true",
+                "vt": "bool"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 250,
+        "y": 620,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "9aaf616355b361f2",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Mode - Cycle",
+        "props": [
+            {
+                "p": "payload.Foreground.Mode",
+                "v": "Cycle",
+                "vt": "str"
+            },
+            {
+                "p": "payload.Foreground.Slanted",
+                "v": "true",
+                "vt": "bool"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 230,
+        "y": 660,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "dcd3568b87057198",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Mode - None",
+        "props": [
+            {
+                "p": "payload.Frame.Mode",
+                "v": "None",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1060,
+        "y": 540,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "2aad80d548f876f8",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Mode - SolidColor",
+        "props": [
+            {
+                "p": "payload.Frame.Mode",
+                "v": "SolidColor",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1080,
+        "y": 620,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "c84fff691e340e83",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - None",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "None",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 660,
+        "y": 540,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "b49aad48fc57fec7",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - Twinkle",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "Twinkle",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 670,
+        "y": 660,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "f73920ec48b11171",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - Fireworks",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "Fireworks",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 680,
+        "y": 700,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "834c39a27578d8e9",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - Thunderstorm",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "Thunderstorm",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 690,
+        "y": 740,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "b50238d13eb5bcc0",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - Firepit",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "Firepit",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 670,
+        "y": 780,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "bd148fd0d14107dc",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - WhiteSmoke",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "16119285",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 250,
+        "y": 280,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "693f52165d4f471f",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - MediumBlue",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "205",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 250,
+        "y": 320,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "c80c16ab5909b9ce",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - Peru",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "13468991",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 220,
+        "y": 360,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "3a989f5358efdaad",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - Red",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "16711680",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 220,
+        "y": 400,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "c2e526c3f315aa8a",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - DarkOrange",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "16747520",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 250,
+        "y": 440,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "77e5804a399c90df",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFG - Color - LightBlue",
+        "props": [
+            {
+                "p": "payload.Foreground.Color",
+                "v": "11393254",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 240,
+        "y": 480,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "6a49897e72dddba3",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - Beige",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "16119260",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 670,
+        "y": 240,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "901e75cb8e8085ba",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - WhiteSmoke",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "16119285",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 690,
+        "y": 280,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "39e6340a1d20684d",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - MediumBlue",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "205",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 690,
+        "y": 320,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "8a1e0502f7702ab2",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - Peru",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "13468991",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 660,
+        "y": 360,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "afe9a3eb34828f50",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - Red",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "16711680",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 660,
+        "y": 400,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "1566bd4ac27de57e",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - DarkOrange",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "16747520",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 690,
+        "y": 440,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "bc07d6f5226b2001",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Color - LightBlue",
+        "props": [
+            {
+                "p": "payload.Background.Color",
+                "v": "11393254",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 680,
+        "y": 480,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "35d53aa845d2caca",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - Beige",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "16119260",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1060,
+        "y": 240,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "3b180573f3fa824c",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - WhiteSmoke",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "16119285",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1090,
+        "y": 280,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "96afa0d59f3a2477",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - MediumBlue",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "205",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1090,
+        "y": 320,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "73831a59b89c515d",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - Peru",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "13468991",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1060,
+        "y": 360,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "fe6707e7adafc263",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - Red",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "16711680",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1060,
+        "y": 400,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "cee852460409d9bd",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - DarkOrange",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "16747520",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1090,
+        "y": 440,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "5a68146e5338ab7b",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - LightBlue",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "11393254",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1080,
+        "y": 480,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "2b59e86b716b1785",
+        "type": "mqtt out",
+        "z": "735deefdd37fe4b9",
+        "name": "",
+        "topic": "home/hallway/clock",
+        "qos": "1",
+        "retain": "true",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "8e1ca31fe77bae5b",
+        "x": 1050,
+        "y": 820,
+        "wires": []
+    },
+    {
+        "id": "df241047d73e7429",
+        "type": "mqtt out",
+        "z": "735deefdd37fe4b9",
+        "name": "",
+        "topic": "home/hallway/clock",
+        "qos": "1",
+        "retain": "true",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "8e1ca31fe77bae5b",
+        "x": 630,
+        "y": 820,
+        "wires": []
+    },
+    {
+        "id": "e70440747a0b4d3f",
+        "type": "mqtt out",
+        "z": "735deefdd37fe4b9",
+        "name": "",
+        "topic": "home/hallway/clock",
+        "qos": "1",
+        "retain": "true",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "8e1ca31fe77bae5b",
+        "x": 1430,
+        "y": 820,
+        "wires": []
+    },
+    {
+        "id": "7a0108049ea6e0bd",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeBG - Mode - SolidColor",
+        "props": [
+            {
+                "p": "payload.Background.Mode",
+                "v": "SolidColor",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 680,
+        "y": 580,
+        "wires": [
+            [
+                "2b59e86b716b1785"
+            ]
+        ]
+    },
+    {
+        "id": "237e8e984b06859b",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "ModeFR - Color - Grey",
+        "props": [
+            {
+                "p": "payload.Frame.Color",
+                "v": "8421504",
+                "vt": "num"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 1060,
+        "y": 200,
+        "wires": [
+            [
+                "e70440747a0b4d3f"
+            ]
+        ]
+    },
+    {
+        "id": "67acd29c82b5c2f3",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Recycling",
+        "props": [
+            {
+                "p": "payload.Brightness",
+                "v": "50",
+                "vt": "num"
+            },
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"Recycling\":{\"Paper\":{\"Date\":[[25,22,22,19,17,14,12,9,6,4,8,6,0,0,0,0,0,0,0,0],[1,2,3,4,5,6,7,8,9,10,11,12,0,0,0,0,0,0,0,0]],\"Color\":16119285},\"Cardboard\":{\"Date\":[[4,1,1,29,26,24,21,19,16,13,11,15,13,0,0,0,0,0,0,0],[1,2,3,4,5,6,7,8,9,10,11,12,0,0,0,0,0,0,0,0]],\"Color\":16747520},\"Metal\":{\"Date\":[[15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[12,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],\"Color\":205}}}",
+        "payloadType": "json",
+        "x": 380,
+        "y": 20,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "1c77077d58b434ae",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Recycling - Paper",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"Recycling\":{\"Paper\":{\"Date\":[[25,22,22,19,17,14,12,9,6,4,8,6,0,0,0,0,0,0,0,0],[1,2,3,4,5,6,7,8,9,10,11,12,0,0,0,0,0,0,0,0]],\"Color\":16119285}}}",
+        "payloadType": "json",
+        "x": 410,
+        "y": 60,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "e515ae521062f220",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Recycling - Cardboard",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"Recycling\":{\"Cardboard\":{\"Date\":[[4,1,1,29,26,24,21,19,16,13,11,15,13,0,0,0,0,0,0,0],[1,2,3,4,5,6,7,8,9,10,11,12,0,0,0,0,0,0,0,0]],\"Color\":16747520}}}",
+        "payloadType": "json",
+        "x": 420,
+        "y": 100,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "0837af79042bab2f",
+        "type": "inject",
+        "z": "735deefdd37fe4b9",
+        "name": "Recycling - Metal",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"Recycling\":{\"Metal\":{\"Date\":[[15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[12,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],\"Color\":205}}}",
+        "payloadType": "json",
+        "x": 400,
+        "y": 140,
+        "wires": [
+            [
+                "df241047d73e7429"
+            ]
+        ]
+    },
+    {
+        "id": "8e1ca31fe77bae5b",
+        "type": "mqtt-broker",
+        "name": "Mosquitto",
+        "broker": "192.168.192.11",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]
